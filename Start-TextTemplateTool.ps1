@@ -1,3 +1,4 @@
+#Requires -Version 5.1
 <#
     .SYNOPSIS
     Text Template Tool (TTT) by KUHN Engineering
@@ -6,7 +7,7 @@
     Compact and efficient PowerShell utility that quickly searches through text templates and copies them directly to the clipboard for immediate use.
 
     .NOTES
-    Version:        0.3.0
+    Version:        0.4.0
     Author:         Christian Kuhn, KUHN Engineering, www.kuhn-engineering.ch
     Date:           2025
 
@@ -23,29 +24,43 @@
 
 ### < GENERAL >
 $app_name = "TTT - Text Template Tool"
-$app_version = "0.3.0"
+$app_version = "0.4.0"
 
 ### < CONFIGURATION >
 $CONFIG_personal_config_filename = "config-personal.txt"
 $CONFIG_personal_template_filename = "templates-personal.json"
-$CONFIG_search_number_of_results = 10
+$CONFIG_number_of_results = 10
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 ### < SUB FUNCTIONS >
 function Write-Header {
-    process{
+    process {
         Clear-Host
         Write-Host "################################################################################"
-        Write-Host "# Text Template Tool by KUHN Engineering                                (V$($app_version))"
+        Write-Host "# TTT - Text Template Tool by KUHN Engineering                          (V$($app_version))"
         Write-Host "################################################################################"
         Write-Host ""
+    }
+}
+
+function Write-StartupScreen {
+    process {
+        Write-Host ""
+        Write-Host "                             __________________"
+        Write-Host "                            /_  __/_  __/_  __/"
+        Write-Host "                             / /   / /   / /"
+        Write-Host "                            /_/   /_/   /_/"
+        Write-Host ""
+        Write-Host ""
+        Write-Host ""
+        Write-Host "Enter command 'h' for help."
     }
 }
 
 function Add-DesktopShortcut {
     process {
         $shortcut_path = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "$($app_name).lnk")
-        if(!(Test-Path -Path $shortcut_path)){
+        if (!(Test-Path -Path $shortcut_path)) {
 
             Write-Host "- Adding desktop shortcut..."
             
@@ -60,7 +75,6 @@ function Add-DesktopShortcut {
             $shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName($script_path)
             $shortcut.Description = "Desktop Shortcut for $($app_name)"
             $shortcut.IconLocation = "$PowerShellPath, 0"
-            # TODO: add hotkey to shortcut
 
             $shortcut.Save()
         }
@@ -82,8 +96,9 @@ function Set-Config {
 
         try {
             $path = Resolve-Path -Path $path -ErrorAction Stop
-            "personal-template-folder: $($path)" | Out-File -FilePath $FilePath
-        }catch {
+            "personal-template-folder: $($path)" | Out-File -FilePath $FilePath -Encoding UTF8
+        }
+        catch {
             Write-Host "Unable to set configuration. Invalid path or access denied." -ForegroundColor Red
             Write-Host "Please restart or add configuration file manually." -ForegroundColor Red
             Write-Host "Press any key to exit." -ForegroundColor Red
@@ -97,14 +112,10 @@ function Read-Config {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
+        [ValidateScript({ Test-Path -Path $_ -Type Leaf -Include "*.txt" })]
         $FilePath
     )
     process {
-        if (-not (Test-Path $FilePath)) {
-            Write-Error "Config file '$($FilePath)' does not exist."
-            return
-        }
 
         $config = @{}
         Get-Content -Path $FilePath | ForEach-Object {
@@ -125,12 +136,9 @@ function Search-Template {
         $Templates,
 
         [Parameter(Mandatory = $true)]
-        [string] $Query,
-
-        [Parameter(Mandatory = $true)]
-        $Config
+        [string] $Query
     )
-    begin{
+    begin {
         # search algorithm configuration
         $factor_title = 10
         $factor_relativePath = 10
@@ -142,32 +150,32 @@ function Search-Template {
         $splitQueries = $Query.Split(" ").Trim()
 
         # iterate among templates and calculate query match score
-        ForEach($template in $templates){
+        ForEach ($template in $templates) {
 
             $template.score = 0
-            ForEach($splitQuery in $splitQueries){
+            ForEach ($splitQuery in $splitQueries) {
                 $score = 0
 
                 # title
-                if($template.Title -like "*$splitQuery*"){
+                if ($template.Title -like "*$splitQuery*") {
                     $score += $factor_title
                 }
 
                 # relative path
-                if($template.RelativePath -like "*$splitQuery*"){
+                if ($template.RelativePath -like "*$splitQuery*") {
                     $score += $factor_relativePath
                 }
 
                 # keywords
-                ForEach($keyword in $template.Keywords){
-                    if($keyword -like "*$splitQuery*"){
+                ForEach ($keyword in $template.Keywords) {
+                    if ($keyword -like "*$splitQuery*") {
                         $score += $factor_keywords
                     }
                 }
 
                 # content
-                ForEach($content in $template.Content){
-                    if($content -like "*$splitQuery*"){
+                ForEach ($content in $template.Content) {
+                    if ($content -like "*$splitQuery*") {
                         $score += $factor_content
                     }
                 }
@@ -177,33 +185,56 @@ function Search-Template {
         }
         
         $results = $templates `
-            | Where-Object{$_.Score -gt 0} `
-            | Sort-Object -Property Score -Descending `
-            | Select-Object -First $CONFIG_search_number_of_results
+        | Where-Object { $_.Score -gt 0 } `
+        | Sort-Object -Property Score -Descending `
+        | Select-Object -First $CONFIG_number_of_results
 
         return $results
     }
 }
 
-function Write-SearchResults {
+function Write-Results {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
         $Templates,
         [Parameter(Mandatory = $false)]
-        $Selection = 1
+        $Selection = 1,
+        [Parameter(Mandatory = $false)]
+        $Style = "search"
     )
     process {
 
-        $cnt =  0
-        ForEach($template in $templates){
+        $cnt = 0
+        ForEach ($template in $templates) {
+
+            # header
+            if ($cnt -eq 0) {
+                if ($Style -eq "modified") {
+                    Write-Host "Most recently modified templates:"
+                    Write-Host ""
+                }
+            }
+
+            # enumeration
             $cnt += 1
-            # TODO: dynamic padding depending on number_of_results
             $cntStr = $cnt.ToString().PadLeft(3, ' ')
-            if($cnt -eq $Selection){
-                Write-Host " $cntStr | $($template.Title) [$($template.Score)]" -ForegroundColor Yellow
-            }else{
-                Write-Host " $cntStr | $($template.Title) [$($template.Score)]"
+            
+            # string
+            if ($Style -eq "modified") {
+                $printStr = " $cntStr | $($template.LastWriteTime) $($template.Title)"
+            }
+            else {
+                # "search"
+                $printStr = " $cntStr | $($template.Title) [$($template.Score)]"
+            }
+
+            # write + color
+            if ($cnt -eq $Selection) {
+                Write-Host $printStr -ForegroundColor Yellow
+            }
+            else {
+                Write-Host $printStr
             }
         }
     }
@@ -222,12 +253,20 @@ function Get-TemplatesFromFolder {
         $templates = @()
 
         # get files
-        $files = Get-ChildItem -Path $folder -Recurse -File -Include *.txt
+        $files = Get-ChildItem -Path $folder -Recurse -File -Include "*.txt"
 
         # process files
-        ForEach($file in $files){
+        $cnt = 0
+        ForEach ($file in $files) {
+            $cnt += 1
+            $percentComplete = [math]::Round(($cnt / $files.Count) * 100, 2)
+            Write-Progress  -Activity "Processing templates" `
+                -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
+                -PercentComplete $percentComplete
+
             $templates += Get-TemplateFromFile -FilePath $file -BaseFolder $TemplateFolder
         }
+        Write-Progress -Activity "Processing Text Files" -Completed
 
         return $templates
     }
@@ -253,6 +292,9 @@ function Get-TemplateFromFile {
         # get path
         $relativePath = $FilePath | Split-Path -Parent | ForEach-Object { $_ -replace [regex]::Escape($BaseFolder), "" } | ForEach-Object { $_ -replace "^\\", "" }
 
+        # get lastWriteTime
+        $lastWriteTime = (Get-ChildItem -Path $FilePath).LastWriteTime
+
         # get content
         $rawContent = Get-Content -Path $FilePath -Raw -Encoding UTF8
         $lines = $rawContent -split '\r?\n'
@@ -263,35 +305,37 @@ function Get-TemplateFromFile {
         $isKeywords = $firstLine.StartsWith("KEYWORDS:")
         $keywords = @()
         if ($isKeywords) {
-            $keywords = $firstLine.Replace("KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim()}
-            $content = $lines[1..($numberOfLines-1)]
-        }else{
+            $keywords = $firstLine.Replace("KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim() }
+            $content = $lines[1..($numberOfLines - 1)]
+        }
+        else {
             $content = $lines
         }
 
         $template = [PSCustomObject]@{
-            Title           = $title
-            RelativePath    = $relativePath
-            Keywords        = $keywords
-            Content         = $content
-            Score           = 0
-            File            = $FilePath
-            Personal        = $Personal
+            Title         = $title
+            RelativePath  = $relativePath
+            Keywords      = $keywords
+            Content       = $content
+            Score         = 0
+            File          = $FilePath
+            LastWriteTime = $lastWriteTime
+            Personal      = $Personal
         }
 
         return $template
     }
 }
 
-function Convert-Templates2JSON {
+function Convert-TemplatesToJSON {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false)]
         [ValidateScript({ Test-Path -Path $_ -Type Container })]
-        $Folder = $True,
+        $Folder,
 
         [Parameter(Mandatory = $true)]
-        $JSONFile = $False
+        $JSONFile
     )
     process {
         $templates = Get-TemplatesFromFolder -TemplateFolder $Folder
@@ -299,17 +343,76 @@ function Convert-Templates2JSON {
     }
 }
 
-function Read-TemplateJSON {
+function Import-TemplatesFromJSON {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
-        $FilePath
+        $JSON
     )
     process {
-        return Get-Content -Path $FilePath -Encoding UTF8 | ConvertFrom-Json
+        return Get-Content -Path $JSON -Encoding UTF8 | ConvertFrom-Json
     }
 }
+
+function Import-Templates {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateScript({ Test-Path -Path $_ -Type Container })]
+        $TemplateFolder,
+
+        [Parameter(Mandatory = $true)]
+        $TemplateFile,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ForceReload
+    )
+    process {
+
+        # checking situation
+        Write-Host "- Checking templates..."
+        $isJSON = Test-Path -Path $TemplateFile
+
+        # reload if needed
+        if ($ForceReload -or !$isJSON) {
+            Write-Host "- Reloading templates from folder..."
+            Convert-TemplatesToJSON -Folder $TemplateFolder -JSONFile $TemplateFile
+        }
+
+        # import templates from json
+        Write-Host "- Importing templates..."
+        $templates = Import-TemplatesFromJSON -JSON $TemplateFile
+
+        return $templates
+    }
+}
+
+function Write-Info {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateScript({ Test-Path -Path $_ -Type Container })]
+        $TemplateFolder,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
+        $TemplateFile,
+
+        [Parameter(Mandatory = $true)]
+        $Templates
+    )
+    process {
+
+        Write-Host "Personal template folder:           $($TemplateFolder)"
+        Write-Host "Personal template count:            $(@($Templates).Count)"
+
+        $lastWriteTime_json_str = (Get-ChildItem -Path $TemplateFile).LastWriteTime.ToString("dd-MM-yyyy HH:mm")
+        Write-Host "Last reload of templates:           $($lastWriteTime_json_str)"
+        Write-Host "PowerShell version:                 $($PSVersionTable.PSVersion.ToString())"
+    }
+}
+
 
 ### < MAIN FUNCTION >
 function Start-TextTemplateTool {
@@ -318,31 +421,31 @@ function Start-TextTemplateTool {
         # startup procedure
         Write-Header
 
+        # add desktop shortcut
         Write-Host "- Checking for desktop shortcut..."
         Add-DesktopShortcut
 
         Write-Host "- Loading configuration..."
         $personal_config_file = Resolve-Path -Path $PSCommandPath | Split-Path -Parent | Join-Path -ChildPath $CONFIG_personal_config_filename
 
-        if(!(Test-Path -Path $personal_config_file)){
+        if (!(Test-Path -Path $personal_config_file)) {
             Set-Config -FilePath $personal_config_file
         }
 
         $config = Read-Config -FilePath $personal_config_file
-        $personal_template_folder =  Resolve-Path -Path $config['personal-template-folder']
 
-        Write-Host "- Loading personal templates..."
+        # derive files and folders from config
+        $personal_template_folder = Resolve-Path -Path $config['personal-template-folder']
         $personal_template_file = Resolve-Path -Path $PSCommandPath | Split-Path -Parent | Join-Path -ChildPath $CONFIG_personal_template_filename
-        Convert-Templates2JSON   -Folder $personal_template_folder -JSONFile $personal_template_file
-        $templates = Read-TemplateJSON -FilePath $personal_template_file
 
+        # import templates
+        $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file
+
+        # write startup screen
         Write-Header
-        Write-Host "Enter command 'h' for help."
-        Write-Host ""
-        Write-Host "Personal template folder:   $($personal_template_folder)"
-        Write-Host "Personal template count:    $(@($templates).Count)"
+        Write-StartupScreen
 
-        if(!$templates){
+        if (!$templates) {
             Write-Host ""
             Write-Host "Your personal template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
             Write-Host "Add your first template to $($personal_template_folder) and restart $($app_name)." -ForegroundColor Yellow
@@ -354,93 +457,140 @@ function Start-TextTemplateTool {
 
         # infinite main loop
         $selection = 1
+        $style = "search"
         $isSelection = $false
-        do{
+        do {
             Write-Host ""
             Write-Host "--------------------------------------------------------------------------------"
             $query = Read-Host "> Search / Select / Command"
             Write-Header
 
             # empty input -> cycle
-            if($query -eq ""){
+            if ($query -eq "") {
                 $selection = 1
+                $style = "search"
+                Write-StartupScreen
                 continue
             }
 
             # check for commands
-            elseif($query -eq "h"){
+            elseif ($query -eq "h") {
                 Write-Host "Available commands:"
                 Write-Host ""
-                Write-Host "   h    help       Displays all available commands."
-                Write-Host "   f    folder     Opens your personal template folder in File Explorer."
-                Write-Host "   r    reload     Reloads templates from your personal template folder."
-                Write-Host "   o    open       Opens the selected template text file."
-                Write-Host "   q    quit       Exits the Text Template Tool."
+                Write-Host "   h    help       Lists all available commands."
+                Write-Host ""
+                Write-Host "   i    info       Displays template count and folder info."
+                Write-Host ""
+                Write-Host "   o    open       Opens the selected template in a text editor."
+                Write-Host ""
+                Write-Host "   p    parent     Opens the folder containing the selected template."
+                Write-Host ""
+                Write-Host "   f    folder     Opens your template folder in File Explorer."
+                Write-Host ""
+                Write-Host "   r    reload     Reloads templates from your template folder."
+                Write-Host ""
+                Write-Host "   m    modified   Lists the most recently modified templates."
+                Write-Host ""
+                Write-Host "   q    quit       Exits Text Template Tool."
+                
+                $selection = 0
                 continue
             }
-            elseif($query -eq "q"){
+            elseif ($query -eq "q") {
                 Clear-Host
                 exit
             }
-            elseif($query -eq "o"){
-                if($isSelection){
-                    Start-Process $topResults[$Selection-1].File
-                }else{
+            elseif ($query -eq "o") {
+                if ($isSelection) {
+                    Start-Process $topResults[$Selection - 1].File
+                }
+                else {
                     Write-Host "Search and select a template before opening with command 'o'."
                     continue
                 }
             }
-            elseif($query -eq "r"){
+            elseif ($query -eq "p") {
+                if ($isSelection) {
+                    $parentFolder = Split-Path -Path $topResults[$Selection - 1].File -Parent
+                    Start-Process $parentFolder
+                }
+                else {
+                    Write-Host "Search and select a template before opening parent folder with command 'p'."
+                    continue
+                }
+            }
+            elseif ($query -eq "r") {
                 Write-Header
-                Write-Host "- Reloading personal templates..."
-                Convert-Templates2JSON -Folder $personal_template_folder -JSONFile $personal_template_file
-                $templates = Read-TemplateJSON -File $personal_template_file
+                $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -ForceReload
 
-                Write-Host ""
-                Write-Host "Personal template folder:   $($personal_template_folder)"
-                Write-Host "Personal template count:    $(@($templates).Count)"
+                Write-Header
+                Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
 
                 $isSelection = $false
                 continue
             }
-            elseif($query -eq "f"){
+            elseif ($query -eq "f") {
                 Start-Process $personal_template_folder
+                continue
+            }
+            elseif ($query -eq "m") {
+
+                $selection = 1
+                $style = "modified"
+                $topResults = $templates | Sort-Object LastWriteTime -Descending | Select-Object -First $CONFIG_number_of_results
+
+                # no template found
+                if (!$topResults) {
+                    Write-Host "No matching template found."
+                    $isSelection = $false
+                    continue
+                }
+                else {
+                    $isSelection = $true
+                }
+            }
+            elseif ($query -eq "i") {
+                Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
+                $isSelection = $false
                 continue
             }
 
             # check for selection inputs
-            elseif( $isSelection -and ($query -match '^(?:[1-9]|[1-9][0-9]|[1-9][0-9]{2})$') ){
-                if ([int]$query -gt $topResults.Count){
+            elseif ( $isSelection -and ($query -match '^(?:[1-9]|[1-9][0-9]|[1-9][0-9]{2})$') ) {
+                if ([int]$query -gt $topResults.Count) {
                     $selection = 1
-                }else{
+                }
+                else {
                     $selection = [int]$query
                 }
             }
 
             # search query
-            else{
+            else {
                 $selection = 1
-                $topResults = Search-Template -Templates $templates -Query $query -Config $config
+                $style = "search"
+                $topResults = Search-Template -Templates $templates -Query $query
 
                 # no template found
-                if (!$topResults){
+                if (!$topResults) {
                     Write-Host "No matching template found."
                     $isSelection = $false
                     continue
-                }else{
+                }
+                else {
                     $isSelection = $true
                 }
             }
 
-            if($isSelection){
-                $template = $topResults[$Selection-1]
+            if ($isSelection) {
+                $template = $topResults[$Selection - 1]
                 $template.Content | Set-Clipboard
                 $template.Content | Write-Host
 
                 Write-Host ""
                 Write-Host "--------------------------------------------------------------------------------"
                 Write-Host ""
-                Write-SearchResults -Templates $topResults -Selection $selection
+                Write-Results -Templates $topResults -Selection $selection -Style $style
             }
 
         } while ( $true )
