@@ -46,9 +46,11 @@ function Write-Header {
 function Write-StartupScreen {
     process{
         Write-Host ""
+        Write-Host "                             __________________"
         Write-Host "                            /_  __/_  __/_  __/"
         Write-Host "                             / /   / /   / /"
         Write-Host "                            /_/   /_/   /_/"
+        Write-Host ""
         Write-Host ""
         Write-Host ""
         Write-Host "Enter command 'h' for help."
@@ -474,7 +476,7 @@ function Start-TextTemplateTool {
                 Write-Host ""
                 Write-Host "   i    info       Displays template count and folder info."
                 Write-Host ""
-                Write-Host "   o    edit       Opens the selected template in a text editor."
+                Write-Host "   o    open       Opens the selected template in a text editor."
                 Write-Host ""
                 Write-Host "   p    parent     Opens the folder containing the selected template."
                 Write-Host ""
