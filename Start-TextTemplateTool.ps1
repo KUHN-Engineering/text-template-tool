@@ -499,7 +499,7 @@ function Start-TextTemplateTool {
                 if($isSelection){
                     Start-Process $topResults[$Selection-1].File
                 }else{
-                    Write-Host "Search and select a template before opening with command 'e'."
+                    Write-Host "Search and select a template before opening with command 'o'."
                     continue
                 }
             }
