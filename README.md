@@ -45,3 +45,12 @@ Compact and efficient PowerShell utility that quickly searches through text temp
 ## Changelog
 ### \[0.3.0\] - 2025-08-17
 - Initial release of the script.
+
+### \[0.4.0\] - 2025-10-29
+- added command "m" to list most recent modified templates
+- added command "i" to show folder path, template count, date of last reload, PowerShell version
+- added command "p" to open folder containing selected template
+- added startup screen with TTT logo
+- removed reload on startup
+- added show progress bar during template reload
+- bugfix and performance improvements
