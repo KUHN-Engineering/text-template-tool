@@ -351,7 +351,7 @@ function Get-TemplateFromFile {
         $relativePath = $FilePath | Split-Path -Parent | ForEach-Object { $_ -replace [regex]::Escape($BaseFolder), "" } | ForEach-Object { $_ -replace "^\\", "" }
 
         # get lastWriteTime
-        $lastWriteTime = (Get-ChildItem -Path $FilePath).LastWriteTime
+        $lastWriteTime = (Get-ChildItem -Path $FilePath).LastWriteTime.ToString("yyyy-MM-dd HH:mm")
 
         # get content
         $rawContent = Get-Content -Path $FilePath -Raw -Encoding UTF8
