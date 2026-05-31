@@ -77,7 +77,7 @@ function Add-DesktopShortcut {
                 $Version        = "Windows PowerShell"
             }
             
-            $scriptPath = Resolve-Path -Path $PSCommandPath
+            $scriptPath = $PSCommandPath
 
             $WShell = New-Object -ComObject WScript.Shell
             $shortcut = $WShell.CreateShortcut($shortcutPath)
@@ -436,7 +436,8 @@ function Start-TextTemplateTool {
         Add-DesktopShortcut
 
         Write-Host "- Loading configuration..."
-        $personal_config_file = Resolve-Path -Path $PSCommandPath | Split-Path -Parent | Join-Path -ChildPath $CONFIG_personal_config_filename
+        $scriptDir = Split-Path -Parent $PSCommandPath
+        $personal_config_file = Join-Path $scriptDir $CONFIG_personal_config_filename
 
         if (!(Test-Path -Path $personal_config_file)) {
             Set-Config -FilePath $personal_config_file
@@ -445,8 +446,15 @@ function Start-TextTemplateTool {
         $config = Read-Config -FilePath $personal_config_file
 
         # derive files and folders from config
-        $personal_template_folder = Resolve-Path -Path $config['personal-template-folder']
-        $personal_template_file = Resolve-Path -Path $PSCommandPath | Split-Path -Parent | Join-Path -ChildPath $CONFIG_personal_template_filename
+        $personal_template_folder = $config['personal-template-folder']
+        if (!(Test-Path -Path $personal_template_folder -PathType Container)) {
+            Write-Host "Personal template folder not found: $($personal_template_folder)" -ForegroundColor Red
+            Write-Host "Update '$($CONFIG_personal_config_filename)' or delete it to reconfigure." -ForegroundColor Red
+            Write-Host "Press any key to exit." -ForegroundColor Red
+            Read-Host
+            exit
+        }
+        $personal_template_file = Join-Path $scriptDir $CONFIG_personal_template_filename
 
         # import templates
         $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file
