@@ -313,7 +313,7 @@ function Get-TemplatesFromFolder {
         $folder = Resolve-Path -Path $TemplateFolder
 
         # get files
-        $files = Get-ChildItem -Path $folder -Recurse -File -Include "*.txt"
+        $files = @(Get-ChildItem -Path $folder -Recurse -File -Include "*.txt")
 
         # process files
         $cnt = 0
