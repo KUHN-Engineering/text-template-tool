@@ -23,6 +23,8 @@
 # - EXECUTION
 
 ### < GENERAL >
+Set-StrictMode -Version Latest
+
 $app_name = "TTT - Text Template Tool"
 $app_version = "0.4.0"
 
@@ -532,6 +534,7 @@ function Start-TextTemplateTool {
         Write-StartupScreen
 
         # infinite main loop
+        $topResults = $null
         $selection = 1
         $style = "search"
         do {
