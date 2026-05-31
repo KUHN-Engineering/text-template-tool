@@ -27,10 +27,15 @@ $app_name = "TTT - Text Template Tool"
 $app_version = "0.4.0"
 
 ### < CONFIGURATION >
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $CONFIG_personal_config_filename = "config-personal.txt"
 $CONFIG_personal_template_filename = "templates-personal.json"
+
+$CONFIG_factor_title = 10
+$CONFIG_factor_relativePath = 10
+$CONFIG_factor_keywords = 5
+$CONFIG_factor_content = 2
 $CONFIG_number_of_results = 10
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 ### < SUB FUNCTIONS >
 function Write-Header {
@@ -100,20 +105,54 @@ function Set-Config {
         $FilePath
     )
     process {
-        Write-Host ""
-        Write-Host "Configuration file '$($CONFIG_personal_config_filename)' not found." -ForegroundColor Yellow
-        Write-Host "Set your desired personal template folder below by drag and drop, copy/paste or typing." -ForegroundColor Yellow
-        Write-Host ""
-        $path = Read-Host "> Personal template folder"
+        $keyName = "personal-template-folder"
+        $fileExists = Test-Path -Path $FilePath
 
+        if ($fileExists) {
+            $keyLine = Get-Content -Path $FilePath | Where-Object { $_ -match "^\s*$([regex]::Escape($keyName))\s*:" } | Select-Object -First 1
+            if ($keyLine) {
+                $existingValue = ($keyLine -split ":", 2)[1].Trim()
+                if ($existingValue -and (Test-Path -Path $existingValue -PathType Container)) { return }
+                (Get-Content -Path $FilePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $FilePath -Encoding UTF8
+            }
+            Write-Host ""
+            Write-Host "Key '$keyName' missing in '$($CONFIG_personal_config_filename)'." -ForegroundColor Yellow
+        } else {
+            Write-Host ""
+            Write-Host "Configuration file '$($CONFIG_personal_config_filename)' not found." -ForegroundColor Yellow
+        }
+
+        Write-Host "Set your personal template folder (drag and drop, copy/paste or type the path)." -ForegroundColor Yellow
+        Write-Host ""
+
+        $resolved = $null
+        while (-not $resolved) {
+            $path = (Read-Host "> Personal template folder").Trim().Trim('"', "'")
+            try {
+                $candidate = Resolve-Path -Path $path -ErrorAction Stop
+                if (Test-Path -Path $candidate -PathType Container) {
+                    $resolved = $candidate
+                } else {
+                    Write-Host "Path exists but is not a folder. Try again." -ForegroundColor Red
+                }
+            }
+            catch {
+                Write-Host "Path not found or access denied. Try again." -ForegroundColor Red
+            }
+        }
+
+        $line = "$keyName`: $resolved"
         try {
-            $path = Resolve-Path -Path $path -ErrorAction Stop
-            "personal-template-folder: $($path)" | Out-File -FilePath $FilePath -Encoding UTF8
+            if ($fileExists) {
+                $existing = Get-Content -Path $FilePath -Raw -Encoding UTF8
+                "$line`n$existing" | Out-File -FilePath $FilePath -Encoding UTF8 -NoNewline
+            } else {
+                $line | Out-File -FilePath $FilePath -Encoding UTF8
+            }
         }
         catch {
-            Write-Host "Unable to set configuration. Invalid path or access denied." -ForegroundColor Red
-            Write-Host "Please restart or add configuration file manually." -ForegroundColor Red
-            Write-Host "Press any key to exit." -ForegroundColor Red
+            Write-Host "Unable to write configuration file: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Please add the configuration file manually and restart." -ForegroundColor Red
             Read-Host
             exit
         }
@@ -128,15 +167,15 @@ function Read-Config {
         $FilePath
     )
     process {
-
         $config = @{}
         Get-Content -Path $FilePath | ForEach-Object {
-            $key, $value = $_ -split ":", 2 | ForEach-Object { $_.Trim() }
+            $line = $_.Trim()
+            if ($line -eq "" -or $line.StartsWith("#")) { return }
+            $key, $value = $line -split ":", 2 | ForEach-Object { $_.Trim() }
             if ($key -and $value) {
                 $config[$key] = $value
             }
         }
-
         return $config
     }
 }
@@ -150,13 +189,6 @@ function Search-Template {
         [Parameter(Mandatory = $true)]
         [string] $Query
     )
-    begin {
-        # search algorithm configuration
-        $factor_title = 10
-        $factor_relativePath = 10
-        $factor_keywords = 5
-        $factor_content = 2
-    }
     process {
         # preprocess search query
         $splitQueries = $Query.Split(" ").Trim()
@@ -170,24 +202,24 @@ function Search-Template {
 
                 # title
                 if ($template.Title -like "*$splitQuery*") {
-                    $score += $factor_title
+                    $score += $CONFIG_factor_title
                 }
 
                 # relative path
                 if ($template.RelativePath -like "*$splitQuery*") {
-                    $score += $factor_relativePath
+                    $score += $CONFIG_factor_relativePath
                 }
 
                 # keywords
                 ForEach ($keyword in $template.Keywords) {
                     if ($keyword -like "*$splitQuery*") {
-                        $score += $factor_keywords
+                        $score += $CONFIG_factor_keywords
                     }
                 }
 
                 # content
                 if ($template.Content -like "*$splitQuery*") {
-                    $score += $factor_content
+                    $score += $CONFIG_factor_content
                 }
 
                 $template.Score += $score
@@ -439,9 +471,7 @@ function Start-TextTemplateTool {
         $scriptDir = Split-Path -Parent $PSCommandPath
         $personal_config_file = Join-Path $scriptDir $CONFIG_personal_config_filename
 
-        if (!(Test-Path -Path $personal_config_file)) {
-            Set-Config -FilePath $personal_config_file
-        }
+        Set-Config -FilePath $personal_config_file
 
         $config = Read-Config -FilePath $personal_config_file
 
