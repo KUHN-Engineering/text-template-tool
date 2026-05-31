@@ -364,8 +364,8 @@ function Get-TemplateFromFile {
             $lines = $rawContent -split '\r?\n', 2  # Split only on first newline
             $firstLine = $lines[0]
             
-            if ($firstLine.StartsWith("KEYWORDS:")) {
-                $keywords = $firstLine.Replace("KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim() }
+            if ($firstLine.StartsWith("KEYWORDS:", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $keywords = ($firstLine -replace "(?i)^KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim() }
                 $content = if ($lines.Count -gt 1) { $lines[1] } else { "" }
             }
         }
