@@ -311,21 +311,20 @@ function Get-TemplatesFromFolder {
     process {
 
         $folder = Resolve-Path -Path $TemplateFolder
-        $templates = @()
 
         # get files
         $files = Get-ChildItem -Path $folder -Recurse -File -Include "*.txt"
 
         # process files
         $cnt = 0
-        ForEach ($file in $files) {
+        $templates = ForEach ($file in $files) {
             $cnt += 1
             $percentComplete = [math]::Round(($cnt / $files.Count) * 100, 2)
             Write-Progress -Activity "Processing templates" `
                 -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
                 -PercentComplete $percentComplete
 
-            $templates += Get-TemplateFromFile -FilePath $file -BaseFolder $TemplateFolder
+            Get-TemplateFromFile -FilePath $file -BaseFolder $TemplateFolder
         }
         Write-Progress -Activity "Processing templates" -Completed
 
