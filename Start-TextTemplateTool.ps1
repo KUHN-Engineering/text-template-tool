@@ -26,7 +26,7 @@
 Set-StrictMode -Version Latest
 
 $script:AppName = "TTT - Text Template Tool"
-$script:AppVersion = "0.4.0"
+$script:AppVersion = "0.5.0"
 
 ### < CONFIGURATION >
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -42,20 +42,69 @@ $script:Config = @{
 
 ### < SUB FUNCTIONS >
 function Set-ClipboardSafe {
-    param([string]$Text)
-    $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
-    $rs.ApartmentState = [System.Threading.ApartmentState]::STA
-    $rs.Open()
-    $ps = [PowerShell]::Create()
-    $ps.Runspace = $rs
-    $null = $ps.AddScript({ param($t) Set-Clipboard -Value $t }).AddArgument($Text)
-    $async = $ps.BeginInvoke()
-    if (-not $async.AsyncWaitHandle.WaitOne(2000)) {
-        $ps.Stop()
-        Write-Host "Warning: Could not copy to clipboard." -ForegroundColor Yellow
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text,
+        
+        [int]$TimeoutMs = 2000,
+        [int]$MaxRetries = 2
+    )
+
+    $attempt = 0
+    while ($attempt -le $MaxRetries) {
+        $runspace = $null
+        $powershell = $null
+        
+        try {
+            $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+            $runspace.ApartmentState = [System.Threading.ApartmentState]::STA
+            $runspace.Open()
+
+            $powershell = [PowerShell]::Create()
+            $powershell.Runspace = $runspace
+
+            $null = $powershell.AddScript({
+                param($text)
+                # Use lower-level API with retry capability if possible
+                Add-Type -AssemblyName System.Windows.Forms
+                [System.Windows.Forms.Clipboard]::SetText($text)
+            }).AddArgument($Text)
+
+            $async = $powershell.BeginInvoke()
+
+            if ($async.AsyncWaitHandle.WaitOne($TimeoutMs)) {
+                # Success path
+                $null = $powershell.EndInvoke($async)
+                return # Exit function
+            } 
+            else {
+                # Timeout
+                $powershell.Stop()
+                $attempt++
+                if ($attempt -le $MaxRetries) {
+                    Start-Sleep -Milliseconds 300
+                }
+            }
+        }
+        catch {
+            Write-Warning "Clipboard operation failed (attempt $attempt): $($_.Exception.Message)"
+            $attempt++
+            if ($attempt -le $MaxRetries) {
+                Start-Sleep -Milliseconds 300
+            }
+        }
+        finally {
+            if ($powershell) { 
+                $powershell.Dispose() 
+            }
+            if ($runspace) { 
+                $runspace.Close()
+                $runspace.Dispose()
+            }
+        }
     }
-    $ps.Dispose()
-    $rs.Close()
+
+    Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor Yellow
 }
 function Write-Header {
     process {
@@ -387,7 +436,7 @@ function Get-TemplateFromFile {
 function Convert-TemplatesToJSON {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Container })]
         $Folder,
 
@@ -455,7 +504,7 @@ function Import-Templates {
 
         # check template cache
         Write-Host "- Checking templates..."
-        $isJSON = Test-Path -Path $TemplateFile -Include "*.json" -Type Leaf
+        $isJSON = Test-Path -Path $TemplateFile -Type Leaf
 
         # rebuild cache from .txt files if missing or forced
         if ($ForceReload -or !$isJSON) {
