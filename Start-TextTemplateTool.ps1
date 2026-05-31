@@ -523,7 +523,6 @@ function Start-TextTemplateTool {
         # infinite main loop
         $selection = 1
         $style = "search"
-        $isSelection = $false
         do {
             Write-Host ""
             Write-Host "--------------------------------------------------------------------------------"
@@ -532,14 +531,21 @@ function Start-TextTemplateTool {
 
             # empty input -> cycle
             if ($query -eq "") {
+
+                # reset TUI state
+                $topResults = $null
                 $selection = 1
-                $style = "search"
+
                 Write-StartupScreen
                 continue
             }
 
             # check for commands
             elseif ($query -eq "h") {
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+
                 Write-Host "Available commands:"
                 Write-Host ""
                 Write-Host "   h    help       Lists all available commands."
@@ -558,7 +564,6 @@ function Start-TextTemplateTool {
                 Write-Host ""
                 Write-Host "   q    quit       Exits Text Template Tool."
                 
-                $selection = 0
                 continue
             }
             elseif ($query -eq "q") {
@@ -566,8 +571,8 @@ function Start-TextTemplateTool {
                 exit
             }
             elseif ($query -eq "o") {
-                if ($isSelection) {
-                    Start-Process $topResults[$Selection - 1].File
+                if ($topResults) {
+                    Start-Process $topResults[$selection - 1].File
                 }
                 else {
                     Write-Host "Search and select a template before opening with command 'o'."
@@ -575,8 +580,8 @@ function Start-TextTemplateTool {
                 }
             }
             elseif ($query -eq "p") {
-                if ($isSelection) {
-                    $parentFolder = Split-Path -Path $topResults[$Selection - 1].File -Parent
+                if ($topResults) {
+                    $parentFolder = Split-Path -Path $topResults[$selection - 1].File -Parent
                     Start-Process $parentFolder
                 }
                 else {
@@ -585,43 +590,51 @@ function Start-TextTemplateTool {
                 }
             }
             elseif ($query -eq "r") {
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+
                 Write-Header
                 $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -ForceReload
 
                 Write-Header
                 Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
 
-                $isSelection = $false
                 continue
             }
             elseif ($query -eq "f") {
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+
                 Start-Process $personal_template_folder
+
+                Write-StartupScreen
                 continue
             }
             elseif ($query -eq "m") {
 
+                $topResults = $templates | Sort-Object LastWriteTime -Descending | Select-Object -First $CONFIG_number_of_results
                 $selection = 1
                 $style = "modified"
-                $topResults = $templates | Sort-Object LastWriteTime -Descending | Select-Object -First $CONFIG_number_of_results
 
                 # no template found
                 if (!$topResults) {
                     Write-Host "No matching template found."
-                    $isSelection = $false
                     continue
-                }
-                else {
-                    $isSelection = $true
                 }
             }
             elseif ($query -eq "i") {
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+
                 Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
-                $isSelection = $false
                 continue
             }
 
             # check for selection inputs
-            elseif ( $isSelection -and ($query -match '^(?:[1-9]|[1-9][0-9]|[1-9][0-9]{2})$') ) {
+            elseif ( $topResults -and ($query -match '^(?:[1-9]|[1-9][0-9])$') ) {
                 if ([int]$query -gt $topResults.Count) {
                     $selection = 1
                 }
@@ -632,27 +645,25 @@ function Start-TextTemplateTool {
 
             # search query
             else {
+                $topResults = Search-Template -Templates $templates -Query $query
                 $selection = 1
                 $style = "search"
-                $topResults = Search-Template -Templates $templates -Query $query
 
                 # no template found
                 if (!$topResults) {
                     Write-Host "No matching template found."
-                    $isSelection = $false
                     continue
-                }
-                else {
-                    $isSelection = $true
                 }
             }
 
-            if ($isSelection) {
-                $template = $topResults[$Selection - 1]
+            if ($topResults) {
+                $template = $topResults[$selection - 1]
                 
                 if ($template.Content) {
                     $template.Content | Set-Clipboard
                     $template.Content | Write-Host
+                }else{
+                    Write-Host "Empty template file." -ForegroundColor Yellow
                 }
 
                 Write-Host ""
