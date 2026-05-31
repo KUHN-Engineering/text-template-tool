@@ -7,9 +7,9 @@
     Compact and efficient PowerShell utility that quickly searches through text templates and copies them directly to the clipboard for immediate use.
 
     .NOTES
-    Version:        0.4.0
+    Version:        0.5.0
     Author:         Christian Kuhn, KUHN Engineering, www.kuhn-engineering.ch
-    Date:           2025
+    Date:           2026
 
     .EXAMPLE
     PS> .\Start-TextTemplateTool.ps1
@@ -25,19 +25,20 @@
 ### < GENERAL >
 Set-StrictMode -Version Latest
 
-$app_name = "TTT - Text Template Tool"
-$app_version = "0.4.0"
+$script:AppName = "TTT - Text Template Tool"
+$script:AppVersion = "0.4.0"
 
 ### < CONFIGURATION >
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$CONFIG_personal_config_filename = "config-personal.txt"
-$CONFIG_personal_template_filename = "templates-personal.json"
-
-$CONFIG_factor_title = 10
-$CONFIG_factor_relativePath = 10
-$CONFIG_factor_keywords = 5
-$CONFIG_factor_content = 2
-$CONFIG_number_of_results = 10
+$script:Config = @{
+    PersonalConfigFilename   = "config-personal.txt"
+    PersonalTemplateCache    = "templates-personal.json"
+    FactorTitle              = 10
+    FactorRelativePath       = 10
+    FactorKeywords           = 5
+    FactorContent            = 2
+    NumberOfResults          = 10
+}
 
 ### < SUB FUNCTIONS >
 function Set-ClipboardSafe {
@@ -60,7 +61,7 @@ function Write-Header {
     process {
         Clear-Host
         Write-Host "################################################################################"
-        Write-Host "# TTT - Text Template Tool by KUHN Engineering                          (V$($app_version))"
+        Write-Host "# TTT - Text Template Tool by KUHN Engineering                          (V$($script:AppVersion))"
         Write-Host "################################################################################"
         Write-Host ""
     }
@@ -82,7 +83,7 @@ function Write-StartupScreen {
 
 function Add-DesktopShortcut {
     process {
-        $shortcutPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "$($app_name).lnk")
+        $shortcutPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "$($script:AppName).lnk")
         if (!(Test-Path -Path $shortcutPath)) {
 
             Write-Host "- Adding desktop shortcut..."
@@ -108,7 +109,7 @@ function Add-DesktopShortcut {
             $shortcut.TargetPath = $TargetPath
             $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
             $shortcut.WorkingDirectory = (Split-Path $scriptPath -Parent)
-            $shortcut.Description = "Desktop Shortcut for $($app_name) using $($Version)"
+            $shortcut.Description = "Desktop Shortcut for $($script:AppName) using $($Version)"
             $shortcut.IconLocation = $IconLocation
 
             $shortcut.Save()
@@ -134,10 +135,10 @@ function Set-Config {
                 (Get-Content -Path $FilePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $FilePath -Encoding UTF8
             }
             Write-Host ""
-            Write-Host "Key '$keyName' missing in '$($CONFIG_personal_config_filename)'." -ForegroundColor Yellow
+            Write-Host "Key '$keyName' missing in '$($script:Config.PersonalConfigFilename)'." -ForegroundColor Yellow
         } else {
             Write-Host ""
-            Write-Host "Configuration file '$($CONFIG_personal_config_filename)' not found." -ForegroundColor Yellow
+            Write-Host "Configuration file '$($script:Config.PersonalConfigFilename)' not found." -ForegroundColor Yellow
         }
 
         Write-Host "Set your personal template folder (drag and drop, copy/paste or type the path)." -ForegroundColor Yellow
@@ -220,24 +221,24 @@ function Search-Template {
 
                 # title
                 if ($template.Title -like "*$splitQuery*") {
-                    $score += $CONFIG_factor_title
+                    $score += $script:Config.FactorTitle
                 }
 
                 # relative path
                 if ($template.RelativePath -like "*$splitQuery*") {
-                    $score += $CONFIG_factor_relativePath
+                    $score += $script:Config.FactorRelativePath
                 }
 
                 # keywords
                 ForEach ($keyword in $template.Keywords) {
                     if ($keyword -like "*$splitQuery*") {
-                        $score += $CONFIG_factor_keywords
+                        $score += $script:Config.FactorKeywords
                     }
                 }
 
                 # content
                 if ($template.Content -like "*$splitQuery*") {
-                    $score += $CONFIG_factor_content
+                    $score += $script:Config.FactorContent
                 }
 
                 $template.Score += $score
@@ -247,7 +248,7 @@ function Search-Template {
         $results = $templates `
         | Where-Object { $_.Score -gt 0 } `
         | Sort-Object -Property Score -Descending `
-        | Select-Object -First $CONFIG_number_of_results
+        | Select-Object -First $script:Config.NumberOfResults
 
         return $results
     }
@@ -401,7 +402,7 @@ function Convert-TemplatesToJSON {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
             Write-Host ""
             Write-Host "Your personal template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
-            Write-Host "Add your first template to $($personal_template_folder) and restart $($app_name)." -ForegroundColor Yellow
+            Write-Host "Add your first template to $($Folder) and restart $($script:AppName)." -ForegroundColor Yellow
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor Yellow
             Read-Host
@@ -457,13 +458,13 @@ function Import-Templates {
         Write-Host "- Checking templates..."
         $isJSON = Test-Path -Path $TemplateFile -Include "*.json" -Type Leaf
 
-        # reload txt templates to JSON if needed or forced
+        # rebuild cache from .txt files if missing or forced
         if ($ForceReload -or !$isJSON) {
             Write-Host "- Reloading templates from folder..."
             Convert-TemplatesToJSON -Folder $TemplateFolder -JSONFile $TemplateFile
         }
 
-        # import templates from json
+        # load templates from cache
         Write-Host "- Importing templates..."
         $templates = Import-TemplatesFromJSON -JSONFile $TemplateFile
 
@@ -508,7 +509,7 @@ function Start-TextTemplateTool {
 
         Write-Host "- Loading configuration..."
         $scriptDir = Split-Path -Parent $PSCommandPath
-        $personal_config_file = Join-Path $scriptDir $CONFIG_personal_config_filename
+        $personal_config_file = Join-Path $scriptDir $script:Config.PersonalConfigFilename
 
         Set-Config -FilePath $personal_config_file
 
@@ -518,15 +519,15 @@ function Start-TextTemplateTool {
         $personal_template_folder = $config['personal-template-folder']
         if (!(Test-Path -Path $personal_template_folder -PathType Container)) {
             Write-Host "Personal template folder not found: $($personal_template_folder)" -ForegroundColor Red
-            Write-Host "Update '$($CONFIG_personal_config_filename)' or delete it to reconfigure." -ForegroundColor Red
+            Write-Host "Update '$($script:Config.PersonalConfigFilename)' or delete it to reconfigure." -ForegroundColor Red
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor Red
             Read-Host
             exit
         }
-        $personal_template_file = Join-Path $scriptDir $CONFIG_personal_template_filename
+        $personal_template_file = Join-Path $scriptDir $script:Config.PersonalTemplateCache
 
-        # import templates
+        # load templates
         $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file
 
         # show startup screen
@@ -628,7 +629,7 @@ function Start-TextTemplateTool {
             }
             elseif ($query -eq "m") {
 
-                $topResults = $templates | Sort-Object LastWriteTime -Descending | Select-Object -First $CONFIG_number_of_results
+                $topResults = $templates | Sort-Object LastWriteTime -Descending | Select-Object -First $script:Config.NumberOfResults
                 $selection = 1
                 $style = "modified"
 
@@ -648,7 +649,7 @@ function Start-TextTemplateTool {
             }
 
             # check for selection inputs
-            elseif ( $topResults -and ($query -match '^(?:[1-9]|[1-9][0-9])$') ) {
+            elseif ( $topResults -and ($query -match '^[1-9]\d*$') ) {
                 if ([int]$query -gt $topResults.Count) {
                     $selection = 1
                 }
