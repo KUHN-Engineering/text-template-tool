@@ -164,7 +164,7 @@ function Search-Template {
         # iterate among templates and calculate query match score
         ForEach ($template in $templates) {
 
-            $template.score = 0
+            $template.Score = 0
             ForEach ($splitQuery in $splitQueries) {
                 $score = 0
 
@@ -186,10 +186,8 @@ function Search-Template {
                 }
 
                 # content
-                ForEach ($content in $template.Content) {
-                    if ($content -like "*$splitQuery*") {
-                        $score += $factor_content
-                    }
+                if ($template.Content -like "*$splitQuery*") {
+                    $score += $factor_content
                 }
 
                 $template.Score += $score
@@ -309,19 +307,19 @@ function Get-TemplateFromFile {
 
         # get content
         $rawContent = Get-Content -Path $FilePath -Raw -Encoding UTF8
-        $lines = $rawContent -split '\r?\n'
-        $numberOfLines = $lines.Count
         
-        # extract keywords
-        $firstLine = $lines[0]
-        $isKeywords = $firstLine.StartsWith("KEYWORDS:")
         $keywords = @()
-        if ($isKeywords) {
-            $keywords = $firstLine.Replace("KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim() }
-            $content = $lines[1..($numberOfLines - 1)]
-        }
-        else {
-            $content = $lines
+        $content = $rawContent
+        
+        # extract keywords from first line if present
+        if ($rawContent) {
+            $lines = $rawContent -split '\r?\n', 2  # Split only on first newline
+            $firstLine = $lines[0]
+            
+            if ($firstLine.StartsWith("KEYWORDS:")) {
+                $keywords = $firstLine.Replace("KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim() }
+                $content = if ($lines.Count -gt 1) { $lines[1] } else { "" }
+            }
         }
 
         $template = [PSCustomObject]@{
@@ -596,8 +594,11 @@ function Start-TextTemplateTool {
 
             if ($isSelection) {
                 $template = $topResults[$Selection - 1]
-                $template.Content | Set-Clipboard
-                $template.Content | Write-Host
+                
+                if ($template.Content) {
+                    $template.Content | Set-Clipboard
+                    $template.Content | Write-Host
+                }
 
                 Write-Host ""
                 Write-Host "--------------------------------------------------------------------------------"
