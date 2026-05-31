@@ -69,7 +69,7 @@ function Add-DesktopShortcut {
 
             Write-Host "- Adding desktop shortcut..."
 
-            # Auto Detect PowerShell 7
+            # auto-detect PowerShell 7
             $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
 
             if ($pwsh) {
@@ -190,10 +190,10 @@ function Search-Template {
         [string] $Query
     )
     process {
-        # preprocess search query
+        # split query into individual terms
         $splitQueries = $Query.Split(" ").Trim()
 
-        # iterate among templates and calculate query match score
+        # score each template against each query term
         ForEach ($template in $templates) {
 
             $template.Score = 0
@@ -302,13 +302,13 @@ function Get-TemplatesFromFolder {
         ForEach ($file in $files) {
             $cnt += 1
             $percentComplete = [math]::Round(($cnt / $files.Count) * 100, 2)
-            Write-Progress  -Activity "Processing templates" `
+            Write-Progress -Activity "Processing templates" `
                 -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
                 -PercentComplete $percentComplete
 
             $templates += Get-TemplateFromFile -FilePath $file -BaseFolder $TemplateFolder
         }
-        Write-Progress -Activity "Processing Text Files" -Completed
+        Write-Progress -Activity "Processing templates" -Completed
 
         return $templates
     }
@@ -413,7 +413,7 @@ function Import-TemplatesFromJSON {
         catch
         {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
-            Write-Host "Error parsing JSON file. JSON file has been removed. Restart the tool to reload templates." -ForegroundColor Red
+            Write-Host "Template cache is corrupt and has been removed. Restart to rebuild it." -ForegroundColor Red
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor Red
             Read-Host
@@ -438,7 +438,7 @@ function Import-Templates {
     )
     process {
 
-        # checking situation
+        # check template cache
         Write-Host "- Checking templates..."
         $isJSON = Test-Path -Path $TemplateFile -Include "*.json" -Type Leaf
 
@@ -501,7 +501,7 @@ function Start-TextTemplateTool {
 
         $config = Read-Config -FilePath $personal_config_file
 
-        # derive files and folders from config
+        # resolve paths from config
         $personal_template_folder = $config['personal-template-folder']
         if (!(Test-Path -Path $personal_template_folder -PathType Container)) {
             Write-Host "Personal template folder not found: $($personal_template_folder)" -ForegroundColor Red
@@ -516,7 +516,7 @@ function Start-TextTemplateTool {
         # import templates
         $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file
 
-        # write startup screen
+        # show startup screen
         Write-Header
         Write-StartupScreen
 
@@ -575,7 +575,7 @@ function Start-TextTemplateTool {
                     Start-Process $topResults[$selection - 1].File
                 }
                 else {
-                    Write-Host "Search and select a template before opening with command 'o'."
+                    Write-Host "No template selected. Search first, then open with 'o'."
                     continue
                 }
             }
@@ -585,7 +585,7 @@ function Start-TextTemplateTool {
                     Start-Process $parentFolder
                 }
                 else {
-                    Write-Host "Search and select a template before opening parent folder with command 'p'."
+                    Write-Host "No template selected. Search first, then open the parent folder with 'p'."
                     continue
                 }
             }
