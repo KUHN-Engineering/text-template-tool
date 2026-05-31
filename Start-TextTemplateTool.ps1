@@ -59,22 +59,34 @@ function Write-StartupScreen {
 
 function Add-DesktopShortcut {
     process {
-        $shortcut_path = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "$($app_name).lnk")
-        if (!(Test-Path -Path $shortcut_path)) {
+        $shortcutPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "$($app_name).lnk")
+        if (!(Test-Path -Path $shortcutPath)) {
 
             Write-Host "- Adding desktop shortcut..."
+
+            # Auto Detect PowerShell 7
+            $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+
+            if ($pwsh) {
+                $TargetPath     = $pwsh.Source
+                $IconLocation   = "$TargetPath,0"
+                $Version        = "PowerShell 7+"
+            } else {
+                $TargetPath     = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+                $IconLocation   = "powershell.exe,0"
+                $Version        = "Windows PowerShell"
+            }
             
-            $script_path = Resolve-Path -Path $PSCommandPath
-            $ps_path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            $scriptPath = Resolve-Path -Path $PSCommandPath
 
             $WShell = New-Object -ComObject WScript.Shell
-            $shortcut = $WShell.CreateShortcut($shortcut_path)
+            $shortcut = $WShell.CreateShortcut($shortcutPath)
 
-            $shortcut.TargetPath = $ps_path
-            $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$script_path`""
-            $shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName($script_path)
-            $shortcut.Description = "Desktop Shortcut for $($app_name)"
-            $shortcut.IconLocation = "$PowerShellPath, 0"
+            $shortcut.TargetPath = $TargetPath
+            $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+            $shortcut.WorkingDirectory = (Split-Path $scriptPath -Parent)
+            $shortcut.Description = "Desktop Shortcut for $($app_name) using $($Version)"
+            $shortcut.IconLocation = $IconLocation
 
             $shortcut.Save()
         }
