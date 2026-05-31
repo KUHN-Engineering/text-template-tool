@@ -338,9 +338,7 @@ function Get-TemplateFromFile {
         [string] $FilePath,
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Container })]
-        [string] $BaseFolder,
-        [Parameter(Mandatory = $false)]
-        [bool] $Personal = $true
+        [string] $BaseFolder
     )
     process {
 
@@ -378,7 +376,6 @@ function Get-TemplateFromFile {
             Score         = 0
             File          = $FilePath
             LastWriteTime = $lastWriteTime
-            Personal      = $Personal
         }
 
         return $template
@@ -478,11 +475,9 @@ function Write-Info {
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Container })]
         $TemplateFolder,
-
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
         $TemplateFile,
-
         [Parameter(Mandatory = $true)]
         $Templates
     )
