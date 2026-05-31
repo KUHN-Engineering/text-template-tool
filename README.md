@@ -46,6 +46,9 @@ Compact and efficient PowerShell utility that quickly searches through text temp
 - **How Templates Are Found**: Matches are based on filename, optional keywords (e.g., `KEYWORDS: customer, mail, request`), folder/subfolder names, and template content.
 - **Ranked Results**: Search results are sorted by a matching score, prioritizing the most relevant templates.
 
+## Configuration
+Copy `config-sample.txt` to `config.txt` to customise behaviour. All settings are optional — the tool works out of the box without a config file. Available settings include search result count, ranking weights, verbose diagnostics, and forced cache reload on startup. See `config-sample.txt` for all options with descriptions.
+
 ## License
 **Text Template Tool (TTT)** is licensed under the [MIT License](LICENSE). You are free to use, modify, and distribute this software, provided you include the original copyright and license notice. See the [LICENSE](LICENSE) file for details.
 

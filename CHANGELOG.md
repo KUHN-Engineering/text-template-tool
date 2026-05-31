@@ -1,6 +1,28 @@
 # Changelog
 
-## [0.5.0] - 2026-06-xx
+## [0.5.0] - 2026-06-xx (DRAFT)
+- feat: enhance desktop shortcut with pwsh 7 auto-detection
+- error-handling:
+  - corrupt json -> force reload / regenerate template
+  - empty template folder
+- refactor: TUI state implementation
+- improved: language of code comment and user messages
+- added CHANGELOG.md
+- improved README.md
+- ? (te be tested) fix: set clipbard freeze issue
+- minor fixes and improvements
+  - fix: Resolve-Path issues
+  - fix: empty file handling
+  - set-strictmode
+  - global config hash table
+  - global variables
+  - template import
+  - fix: single template reload progress bar issue
+  - fix: date time culture invariant implementation
+- refactor and improve implementation of config parameters
+  - set verbose mode
+  - override default config parameters through config file
+  - added sample config file with explanations
 
 ## [0.4.0] - 2025-10-29
 - Added command `m` to list most recently modified templates
