@@ -38,6 +38,22 @@ $CONFIG_factor_content = 2
 $CONFIG_number_of_results = 10
 
 ### < SUB FUNCTIONS >
+function Set-ClipboardSafe {
+    param([string]$Text)
+    $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+    $rs.ApartmentState = [System.Threading.ApartmentState]::STA
+    $rs.Open()
+    $ps = [PowerShell]::Create()
+    $ps.Runspace = $rs
+    $null = $ps.AddScript({ param($t) Set-Clipboard -Value $t }).AddArgument($Text)
+    $async = $ps.BeginInvoke()
+    if (-not $async.AsyncWaitHandle.WaitOne(2000)) {
+        $ps.Stop()
+        Write-Host "Warning: Could not copy to clipboard." -ForegroundColor Yellow
+    }
+    $ps.Dispose()
+    $rs.Close()
+}
 function Write-Header {
     process {
         Clear-Host
@@ -660,7 +676,7 @@ function Start-TextTemplateTool {
                 $template = $topResults[$selection - 1]
                 
                 if ($template.Content) {
-                    $template.Content | Set-Clipboard
+                    Set-ClipboardSafe $template.Content
                     $template.Content | Write-Host
                 }else{
                     Write-Host "Empty template file." -ForegroundColor Yellow
