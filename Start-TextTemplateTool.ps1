@@ -393,7 +393,21 @@ function Import-TemplatesFromJSON {
         $JSON
     )
     process {
-        return Get-Content -Path $JSON -Encoding UTF8 | ConvertFrom-Json
+        $content = Get-Content -Path $JSON -Raw -Encoding UTF8
+        try
+        {
+            $templates = $content | ConvertFrom-Json
+        }
+        catch
+        {
+            Remove-Item -Path $JSON -Force
+            Write-Host "Error parsing JSON file. JSON file has been removed. Restart the tool to reload templates." -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Press any key to exit." -ForegroundColor Red
+            Read-Host
+            exit
+        }
+        return $templates
     }
 }
 
@@ -414,9 +428,9 @@ function Import-Templates {
 
         # checking situation
         Write-Host "- Checking templates..."
-        $isJSON = Test-Path -Path $TemplateFile
+        $isJSON = Test-Path -Path $TemplateFile -Include "*.json" -Type Leaf
 
-        # reload if needed
+        # reload txt templates to JSON if needed or forced
         if ($ForceReload -or !$isJSON) {
             Write-Host "- Reloading templates from folder..."
             Convert-TemplatesToJSON -Folder $TemplateFolder -JSONFile $TemplateFile
@@ -480,6 +494,7 @@ function Start-TextTemplateTool {
         if (!(Test-Path -Path $personal_template_folder -PathType Container)) {
             Write-Host "Personal template folder not found: $($personal_template_folder)" -ForegroundColor Red
             Write-Host "Update '$($CONFIG_personal_config_filename)' or delete it to reconfigure." -ForegroundColor Red
+            Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor Red
             Read-Host
             exit
