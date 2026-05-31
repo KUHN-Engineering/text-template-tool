@@ -1,0 +1,21 @@
+# TTT - Text Template Tool | Sample Configuration
+# Copy to config.txt and adjust as needed.
+# Uncomment a line to override the default value.
+
+# Path to your template folder (set automatically on first run)
+#TemplateFolder: C:\Users\username\Templates
+
+# Number of search results shown
+#NumberOfResults: 10
+
+# Search ranking weights (higher = stronger influence)
+#SearchWeightTitle: 10
+#SearchWeightPath: 10
+#SearchWeightKeywords: 5
+#SearchWeightContent: 2
+
+# Rebuild template cache on every startup (true/false)
+#ReloadCacheOnStartup: false
+
+# Show extra diagnostics in the info command "i" (true/false)
+#VerboseMode: false

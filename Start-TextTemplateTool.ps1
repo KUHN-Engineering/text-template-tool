@@ -31,13 +31,21 @@ $script:AppVersion = "0.5.0"
 ### < CONFIGURATION >
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $script:Config = @{
-    PersonalConfigFilename   = "config-personal.txt"
-    PersonalTemplateCache    = "templates-personal.json"
-    FactorTitle              = 10
-    FactorRelativePath       = 10
-    FactorKeywords           = 5
-    FactorContent            = 2
-    NumberOfResults          = 10
+    ConfigFilename        = "config.txt"
+    TemplateCacheFilename = "template-cache.json"
+
+    # default values can be overridden in config file
+    SearchWeightTitle     = 10
+    SearchWeightPath      = 10
+    SearchWeightKeywords  = 5
+    SearchWeightContent   = 2
+    NumberOfResults       = 10
+    VerboseMode           = $false
+    ReloadCacheOnStartup  = $false
+
+    # will be set during runtime in Read-Config
+    TemplateFolder        = ""
+    TemplateCacheFile     = ""
 }
 
 ### < SUB FUNCTIONS >
@@ -64,11 +72,11 @@ function Set-ClipboardSafe {
             $powershell.Runspace = $runspace
 
             $null = $powershell.AddScript({
-                param($text)
-                # Use lower-level API with retry capability if possible
-                Add-Type -AssemblyName System.Windows.Forms
-                [System.Windows.Forms.Clipboard]::SetText($text)
-            }).AddArgument($Text)
+                    param($text)
+                    # Use lower-level API with retry capability if possible
+                    Add-Type -AssemblyName System.Windows.Forms
+                    [System.Windows.Forms.Clipboard]::SetText($text)
+                }).AddArgument($Text)
 
             $async = $powershell.BeginInvoke()
 
@@ -141,13 +149,14 @@ function Add-DesktopShortcut {
             $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
 
             if ($pwsh) {
-                $TargetPath     = $pwsh.Source
-                $IconLocation   = "$TargetPath,0"
-                $Version        = "PowerShell 7+"
-            } else {
-                $TargetPath     = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-                $IconLocation   = "powershell.exe,0"
-                $Version        = "Windows PowerShell"
+                $TargetPath = $pwsh.Source
+                $IconLocation = "$TargetPath,0"
+                $Version = "PowerShell 7+"
+            }
+            else {
+                $TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+                $IconLocation = "powershell.exe,0"
+                $Version = "Windows PowerShell"
             }
             
             $scriptPath = $PSCommandPath
@@ -166,85 +175,115 @@ function Add-DesktopShortcut {
     }
 }
 
-function Set-Config {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        $FilePath
-    )
+function Read-Config {
     process {
-        $keyName = "personal-template-folder"
-        $fileExists = Test-Path -Path $FilePath
+        $scriptDir = Split-Path -Parent $PSCommandPath
+        $filePath = Join-Path $scriptDir $script:Config.ConfigFilename
+        $keyName = "TemplateFolder"
+        $fileExists = Test-Path -Path $filePath
+        $needsPrompt = $true
 
+        # check if TemplateFolder key already has a valid value
         if ($fileExists) {
-            $keyLine = Get-Content -Path $FilePath | Where-Object { $_ -match "^\s*$([regex]::Escape($keyName))\s*:" } | Select-Object -First 1
+            $keyLine = Get-Content -Path $filePath | Where-Object { $_ -match "^\s*$([regex]::Escape($keyName))\s*:" } | Select-Object -First 1
             if ($keyLine) {
                 $existingValue = ($keyLine -split ":", 2)[1].Trim()
-                if ($existingValue -and (Test-Path -Path $existingValue -PathType Container)) { return }
-                (Get-Content -Path $FilePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $FilePath -Encoding UTF8
+                if ($existingValue -and (Test-Path -Path $existingValue -PathType Container)) {
+                    $needsPrompt = $false
+                }
+                else {
+                    (Get-Content -Path $filePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $filePath -Encoding UTF8
+                    Write-Host ""
+                    Write-Host "Key '$keyName' has an invalid value in '$($script:Config.ConfigFilename)'." -ForegroundColor Yellow
+                }
             }
+            else {
+                Write-Host ""
+                Write-Host "Key '$keyName' missing in '$($script:Config.ConfigFilename)'." -ForegroundColor Yellow
+            }
+        }
+        else {
             Write-Host ""
-            Write-Host "Key '$keyName' missing in '$($script:Config.PersonalConfigFilename)'." -ForegroundColor Yellow
-        } else {
-            Write-Host ""
-            Write-Host "Configuration file '$($script:Config.PersonalConfigFilename)' not found." -ForegroundColor Yellow
+            Write-Host "Configuration file '$($script:Config.ConfigFilename)' not found." -ForegroundColor Yellow
         }
 
-        Write-Host "Set your personal template folder (drag and drop, copy/paste or type the path)." -ForegroundColor Yellow
-        Write-Host ""
+        # prompt for template-folder if needed
+        if ($needsPrompt) {
+            Write-Host "Set your template folder (drag and drop, copy/paste or type the path)." -ForegroundColor Yellow
+            Write-Host ""
 
-        $resolved = $null
-        while (-not $resolved) {
-            $path = (Read-Host "> Personal template folder").Trim().Trim('"', "'")
+            $resolved = $null
+            while (-not $resolved) {
+                $path = (Read-Host "> Template folder").Trim().Trim('"', "'")
+                try {
+                    $candidate = Resolve-Path -Path $path -ErrorAction Stop
+                    if (Test-Path -Path $candidate -PathType Container) {
+                        $resolved = $candidate
+                    }
+                    else {
+                        Write-Host "Path exists but is not a folder. Try again." -ForegroundColor Red
+                    }
+                }
+                catch {
+                    Write-Host "Path not found or access denied. Try again." -ForegroundColor Red
+                }
+            }
+
+            # insert or overwrite key-value pair to config file or create new file if it doesn't exist
+            $line = "$keyName`: $resolved"
             try {
-                $candidate = Resolve-Path -Path $path -ErrorAction Stop
-                if (Test-Path -Path $candidate -PathType Container) {
-                    $resolved = $candidate
-                } else {
-                    Write-Host "Path exists but is not a folder. Try again." -ForegroundColor Red
+                if ($fileExists) {
+                    $existing = Get-Content -Path $filePath -Raw -Encoding UTF8
+                    "$line`n$existing" | Out-File -FilePath $filePath -Encoding UTF8 -NoNewline
+                }
+                else {
+                    $line | Out-File -FilePath $filePath -Encoding UTF8
                 }
             }
             catch {
-                Write-Host "Path not found or access denied. Try again." -ForegroundColor Red
+                Write-Host "Unable to write configuration file: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "Please add the configuration file manually and restart." -ForegroundColor Red
+                Read-Host
+                exit
             }
         }
 
-        $line = "$keyName`: $resolved"
-        try {
-            if ($fileExists) {
-                $existing = Get-Content -Path $FilePath -Raw -Encoding UTF8
-                "$line`n$existing" | Out-File -FilePath $FilePath -Encoding UTF8 -NoNewline
-            } else {
-                $line | Out-File -FilePath $FilePath -Encoding UTF8
-            }
+        # read all key-value pairs from config file
+        $config = @{}
+        Get-Content -Path $filePath | ForEach-Object {
+            $cfgLine = $_.Trim()
+            if ($cfgLine -eq "" -or $cfgLine.StartsWith("#")) { return }
+            $key, $value = $cfgLine -split ":", 2 | ForEach-Object { $_.Trim() }
+            if ($key -and $value) { $config[$key] = $value }
         }
-        catch {
-            Write-Host "Unable to write configuration file: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host "Please add the configuration file manually and restart." -ForegroundColor Red
+
+        # apply optional config overrides
+        $intValue = 0
+        $boolValue = $false
+        if ($config.ContainsKey('NumberOfResults') -and [int]::TryParse($config['NumberOfResults'], [ref]$intValue)) { $script:Config.NumberOfResults = $intValue }
+        if ($config.ContainsKey('SearchWeightTitle') -and [int]::TryParse($config['SearchWeightTitle'], [ref]$intValue)) { $script:Config.SearchWeightTitle = $intValue }
+        if ($config.ContainsKey('SearchWeightPath') -and [int]::TryParse($config['SearchWeightPath'], [ref]$intValue)) { $script:Config.SearchWeightPath = $intValue }
+        if ($config.ContainsKey('SearchWeightKeywords') -and [int]::TryParse($config['SearchWeightKeywords'], [ref]$intValue)) { $script:Config.SearchWeightKeywords = $intValue }
+        if ($config.ContainsKey('SearchWeightContent') -and [int]::TryParse($config['SearchWeightContent'], [ref]$intValue)) { $script:Config.SearchWeightContent = $intValue }
+        if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
+        if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
+
+        # validate template folder
+        $templateFolder = $config[$keyName]
+        if (!(Test-Path -Path $templateFolder -PathType Container)) {
+            Write-Host "Template folder not found: $templateFolder" -ForegroundColor Red
+            Write-Host "Update '$($script:Config.ConfigFilename)' or delete it to reconfigure." -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Press any key to exit." -ForegroundColor Red
             Read-Host
             exit
         }
-    }
-}
 
-function Read-Config {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Leaf -Include "*.txt" })]
-        $FilePath
-    )
-    process {
-        $config = @{}
-        Get-Content -Path $FilePath | ForEach-Object {
-            $line = $_.Trim()
-            if ($line -eq "" -or $line.StartsWith("#")) { return }
-            $key, $value = $line -split ":", 2 | ForEach-Object { $_.Trim() }
-            if ($key -and $value) {
-                $config[$key] = $value
-            }
-        }
-        return $config
+        $script:Config.TemplateFolder = $templateFolder
+        $script:Config.TemplateCacheFile = Join-Path $scriptDir $script:Config.TemplateCacheFilename
+
+        # set verbose mode if enabled in config
+        if ($script:Config.VerboseMode) { $script:VerbosePreference = 'Continue' } else { $script:VerbosePreference = 'SilentlyContinue' }
     }
 }
 
@@ -270,24 +309,24 @@ function Search-Template {
 
                 # title
                 if ($template.Title -like "*$splitQuery*") {
-                    $score += $script:Config.FactorTitle
+                    $score += $script:Config.SearchWeightTitle
                 }
 
                 # relative path
                 if ($template.RelativePath -like "*$splitQuery*") {
-                    $score += $script:Config.FactorRelativePath
+                    $score += $script:Config.SearchWeightPath
                 }
 
                 # keywords
                 ForEach ($keyword in $template.Keywords) {
                     if ($keyword -like "*$splitQuery*") {
-                        $score += $script:Config.FactorKeywords
+                        $score += $script:Config.SearchWeightKeywords
                     }
                 }
 
                 # content
                 if ($template.Content -like "*$splitQuery*") {
-                    $score += $script:Config.FactorContent
+                    $score += $script:Config.SearchWeightContent
                 }
 
                 $template.Score += $score
@@ -449,7 +488,7 @@ function Convert-TemplatesToJSON {
         if (!$templates) {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
             Write-Host ""
-            Write-Host "Your personal template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
+            Write-Host "Your template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
             Write-Host "Add your first template to $($Folder) and restart $($script:AppName)." -ForegroundColor Yellow
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor Yellow
@@ -470,12 +509,10 @@ function Import-TemplatesFromJSON {
     )
     process {
         $content = Get-Content -Path $JSONFile -Raw -Encoding UTF8
-        try
-        {
+        try {
             $templates = $content | ConvertFrom-Json
         }
-        catch
-        {
+        catch {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
             Write-Host "Template cache is corrupt and has been removed. Restart to rebuild it." -ForegroundColor Red
             Write-Host ""
@@ -490,13 +527,6 @@ function Import-TemplatesFromJSON {
 function Import-Templates {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Container })]
-        $TemplateFolder,
-
-        [Parameter(Mandatory = $true)]
-        $TemplateFile,
-
         [Parameter(Mandatory = $false)]
         [switch]$ForceReload
     )
@@ -504,17 +534,17 @@ function Import-Templates {
 
         # check template cache
         Write-Host "- Checking templates..."
-        $isJSON = Test-Path -Path $TemplateFile -Type Leaf
+        $isJSON = Test-Path -Path $script:Config.TemplateCacheFile -Type Leaf
 
         # rebuild cache from .txt files if missing or forced
         if ($ForceReload -or !$isJSON) {
             Write-Host "- Reloading templates from folder..."
-            Convert-TemplatesToJSON -Folder $TemplateFolder -JSONFile $TemplateFile
+            Convert-TemplatesToJSON -Folder $script:Config.TemplateFolder -JSONFile $script:Config.TemplateCacheFile
         }
 
         # load templates from cache
         Write-Host "- Importing templates..."
-        $templates = Import-TemplatesFromJSON -JSONFile $TemplateFile
+        $templates = Import-TemplatesFromJSON -JSONFile $script:Config.TemplateCacheFile
 
         return $templates
     }
@@ -524,30 +554,35 @@ function Write-Info {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Container })]
-        $TemplateFolder,
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
-        $TemplateFile,
-        [Parameter(Mandatory = $true)]
         $Templates
     )
     process {
 
-        Write-Host "Personal template folder:           $($TemplateFolder)"
-        Write-Host "Personal template count:            $(@($Templates).Count)"
+        Write-Host "Template folder:            $($script:Config.TemplateFolder)"
+        Write-Host "Template count:             $(@($Templates).Count)"
 
-        $lastWriteTime_json_str = (Get-ChildItem -Path $TemplateFile).LastWriteTime.ToString("dd-MM-yyyy HH:mm")
-        Write-Host "Last reload of templates:           $($lastWriteTime_json_str)"
-        Write-Host "PowerShell version:                 $($PSVersionTable.PSVersion.ToString())"
+        $lastWriteTime_json_str = (Get-ChildItem -Path $script:Config.TemplateCacheFile).LastWriteTime.ToString("dd-MM-yyyy HH:mm")
+        Write-Host "Last reload of templates:   $($lastWriteTime_json_str)"
+
+        if ($script:Config.VerboseMode) {
+            Write-Host ""
+            Write-Host "PowerShell version:         $($PSVersionTable.PSVersion.ToString())"  -ForegroundColor Yellow
+            Write-Host "Script location:            $(Split-Path -Parent $PSCommandPath)" -ForegroundColor Yellow
+            Write-Host "Template cache file:        $($script:Config.TemplateCacheFile)" -ForegroundColor Yello
+            Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor Yellow
+            Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor Yellow
+            Write-Host "Search weights:             title=$($script:Config.SearchWeightTitle)  path=$($script:Config.SearchWeightPath)  keywords=$($script:Config.SearchWeightKeywords)  content=$($script:Config.SearchWeightContent)" -ForegroundColor Yellow
+        }
     }
 }
 
 
 ### < MAIN FUNCTION >
 function Start-TextTemplateTool {
+    [CmdletBinding()]
+    param()
     process {
-
+        
         # startup procedure
         Write-Header
 
@@ -556,27 +591,10 @@ function Start-TextTemplateTool {
         Add-DesktopShortcut
 
         Write-Host "- Loading configuration..."
-        $scriptDir = Split-Path -Parent $PSCommandPath
-        $personal_config_file = Join-Path $scriptDir $script:Config.PersonalConfigFilename
-
-        Set-Config -FilePath $personal_config_file
-
-        $config = Read-Config -FilePath $personal_config_file
-
-        # resolve paths from config
-        $personal_template_folder = $config['personal-template-folder']
-        if (!(Test-Path -Path $personal_template_folder -PathType Container)) {
-            Write-Host "Personal template folder not found: $($personal_template_folder)" -ForegroundColor Red
-            Write-Host "Update '$($script:Config.PersonalConfigFilename)' or delete it to reconfigure." -ForegroundColor Red
-            Write-Host ""
-            Write-Host "Press any key to exit." -ForegroundColor Red
-            Read-Host
-            exit
-        }
-        $personal_template_file = Join-Path $scriptDir $script:Config.PersonalTemplateCache
+        Read-Config
 
         # load templates
-        $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file
+        $templates = Import-Templates -ForceReload:$script:Config.ReloadCacheOnStartup
 
         # show startup screen
         Write-Header
@@ -598,6 +616,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
+                $style = "search"
 
                 Write-StartupScreen
                 continue
@@ -658,10 +677,11 @@ function Start-TextTemplateTool {
                 $selection = 1
 
                 Write-Header
-                $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -ForceReload
+                Read-Config
+                $templates = Import-Templates -ForceReload
 
                 Write-Header
-                Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
+                Write-Info -Templates $templates
 
                 continue
             }
@@ -670,7 +690,7 @@ function Start-TextTemplateTool {
                 $topResults = $null
                 $selection = 1
 
-                Start-Process $personal_template_folder
+                Start-Process $script:Config.TemplateFolder
 
                 Write-StartupScreen
                 continue
@@ -692,7 +712,7 @@ function Start-TextTemplateTool {
                 $topResults = $null
                 $selection = 1
 
-                Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
+                Write-Info -Templates $templates
                 continue
             }
 
@@ -722,10 +742,11 @@ function Start-TextTemplateTool {
             if ($topResults) {
                 $template = $topResults[$selection - 1]
                 
-                if ($template.Content) {
+                if (-not [string]::IsNullOrWhiteSpace($template.Content)) {
                     Set-ClipboardSafe $template.Content
-                    $template.Content | Write-Host
-                }else{
+                    Write-Host $template.Content
+                }
+                else {
                     Write-Host "Empty template file." -ForegroundColor Yellow
                 }
 
