@@ -381,6 +381,18 @@ function Convert-TemplatesToJSON {
     )
     process {
         $templates = Get-TemplatesFromFolder -TemplateFolder $Folder
+
+        if (!$templates) {
+            Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
+            Write-Host ""
+            Write-Host "Your personal template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
+            Write-Host "Add your first template to $($personal_template_folder) and restart $($app_name)." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "Press any key to exit." -ForegroundColor Yellow
+            Read-Host
+            exit
+        }
+
         $templates | ConvertTo-Json | Out-File -FilePath $JSONFile -Encoding UTF8
     }
 }
@@ -390,17 +402,17 @@ function Import-TemplatesFromJSON {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
-        $JSON
+        $JSONFile
     )
     process {
-        $content = Get-Content -Path $JSON -Raw -Encoding UTF8
+        $content = Get-Content -Path $JSONFile -Raw -Encoding UTF8
         try
         {
             $templates = $content | ConvertFrom-Json
         }
         catch
         {
-            Remove-Item -Path $JSON -Force
+            Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
             Write-Host "Error parsing JSON file. JSON file has been removed. Restart the tool to reload templates." -ForegroundColor Red
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor Red
@@ -438,7 +450,7 @@ function Import-Templates {
 
         # import templates from json
         Write-Host "- Importing templates..."
-        $templates = Import-TemplatesFromJSON -JSON $TemplateFile
+        $templates = Import-TemplatesFromJSON -JSONFile $TemplateFile
 
         return $templates
     }
@@ -507,16 +519,6 @@ function Start-TextTemplateTool {
         # write startup screen
         Write-Header
         Write-StartupScreen
-
-        if (!$templates) {
-            Write-Host ""
-            Write-Host "Your personal template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
-            Write-Host "Add your first template to $($personal_template_folder) and restart $($app_name)." -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "Press any key to exit." -ForegroundColor Yellow
-            Read-Host
-            exit
-        }
 
         # infinite main loop
         $selection = 1
