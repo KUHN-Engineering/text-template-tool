@@ -293,7 +293,7 @@ function Read-Config {
         $script:Config.TemplateCacheFile = Join-Path $scriptDir $script:Config.TemplateCacheFilename
 
         # set verbose mode if enabled in config
-        if ($script:Config.VerboseMode) { $globaL:VerbosePreference = 'Continue' } else { $globaL:VerbosePreference = 'SilentlyContinue' }
+        $global:VerbosePreference = if ($script:Config.VerboseMode) { 'Continue' } else { 'SilentlyContinue' }
     }
 }
 
@@ -457,7 +457,7 @@ function Get-TemplateFromFile {
         $lastWriteTime = (Get-ChildItem -Path $FilePath).LastWriteTime.ToString("yyyy-MM-dd HH:mm")
 
         # get content
-        $rawContent = Get-Content -Path $FilePath -Raw -Encoding UTF8
+        $rawContent = [System.IO.File]::ReadAllText($FilePath, [System.Text.Encoding]::UTF8)
         
         $keywords = @()
         $content = $rawContent
