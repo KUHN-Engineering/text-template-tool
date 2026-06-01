@@ -19,3 +19,6 @@
 
 # Show extra diagnostics in the info command "i" (true/false)
 #VerboseMode: false
+
+# Message shown once on startup below the header (leave blank to disable)
+#StartupMessage: Welcome to TTT!

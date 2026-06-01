@@ -1,10 +1,10 @@
 # Text Template Tool (TTT)
 
 ```
-                             __________________
-                            /_  __/_  __/_  __/
-                             / /   / /   / /
-                            /_/   /_/   /_/
+             __________________
+            /_  __/_  __/_  __/
+             / /   / /   / /
+            /_/   /_/   /_/      Text Template Tool by KUHN Engineering
 ```
 
 Compact and efficient PowerShell utility that quickly searches through text templates and copies them directly to the clipboard for immediate use.

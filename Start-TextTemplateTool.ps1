@@ -126,7 +126,8 @@ function Write-Header {
         Write-Host "################################################################################"
         if ($ShowStartupMessage -and -not [string]::IsNullOrWhiteSpace($script:Config.StartupMessage)) {
             Write-Host $script:Config.StartupMessage -ForegroundColor Cyan
-        } else {
+        }
+        else {
             Write-Host ""
         }
     }
@@ -389,7 +390,7 @@ function Write-Results {
 
             # write + color
             if ($cnt -eq $Selection) {
-                Write-Host $printStr -ForegroundColor Yellow
+                Write-Host $printStr -ForegroundColor Cyan
             }
             else {
                 Write-Host $printStr
