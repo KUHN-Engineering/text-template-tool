@@ -31,22 +31,33 @@ $script:AppVersion = "0.5.0"
 ### < CONFIGURATION >
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $script:Config = @{
-    ConfigFilename        = "config.txt"
-    TemplateCacheFilename = "template-cache.json"
+    ConfigFilename                = "config.txt"
+    TemplateCacheFilename         = "template-cache.json"
 
     # default values can be overridden in config file
-    SearchWeightTitle     = 10
-    SearchWeightPath      = 10
-    SearchWeightKeywords  = 5
-    SearchWeightContent   = 2
-    NumberOfResults       = 10
-    VerboseMode           = $false
-    ReloadCacheOnStartup  = $false
-    StartupMessage        = ""
+    SearchDimensionWeightTitle    = 10
+    SearchDimensionWeightPath     = 8
+    SearchDimensionWeightKeywords = 6
+    SearchDimensionWeightContent  = 2
+    SearchMatchWeightExact        = 100
+    SearchMatchWeightPrefix       = 50
+    SearchMatchWeightSubstring    = 10
+    NumberOfResults               = 10
+    ColorHighlight                = "Cyan"
+    ColorWarning                  = "Yellow"
+    ColorError                    = "Red"
+    VerboseMode                   = $false
+    ReloadCacheOnStartup          = $false
+    StartupMessage                = ""
 
     # will be set during runtime in Read-Config
-    TemplateFolder        = ""
-    TemplateCacheFile     = ""
+    TemplateFolder                = ""
+    TemplateCacheFile             = ""
+}
+
+$script:Stats = @{
+    RebuildCacheMs = 0
+    PreprocessMs   = 0
 }
 
 ### < SUB FUNCTIONS >
@@ -113,7 +124,7 @@ function Set-ClipboardSafe {
         }
     }
 
-    Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor Yellow
+    Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor $script:Config.ColorWarning
 }
 function Write-Header {
     param(
@@ -125,7 +136,7 @@ function Write-Header {
         Write-Host "# TTT - Text Template Tool by KUHN Engineering                          (V$($script:AppVersion))"
         Write-Host "################################################################################"
         if ($ShowStartupMessage -and -not [string]::IsNullOrWhiteSpace($script:Config.StartupMessage)) {
-            Write-Host $script:Config.StartupMessage -ForegroundColor Cyan
+            Write-Host $script:Config.StartupMessage -ForegroundColor $script:Config.ColorHighlight
         }
         else {
             Write-Host ""
@@ -203,22 +214,22 @@ function Read-Config {
                 else {
                     (Get-Content -Path $filePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $filePath -Encoding UTF8
                     Write-Host ""
-                    Write-Host "Key '$keyName' has an invalid value in '$($script:Config.ConfigFilename)'." -ForegroundColor Yellow
+                    Write-Host "Key '$keyName' has an invalid value in '$($script:Config.ConfigFilename)'." -ForegroundColor $script:Config.ColorWarning
                 }
             }
             else {
                 Write-Host ""
-                Write-Host "Key '$keyName' missing in '$($script:Config.ConfigFilename)'." -ForegroundColor Yellow
+                Write-Host "Key '$keyName' missing in '$($script:Config.ConfigFilename)'." -ForegroundColor $script:Config.ColorWarning
             }
         }
         else {
             Write-Host ""
-            Write-Host "Configuration file '$($script:Config.ConfigFilename)' not found." -ForegroundColor Yellow
+            Write-Host "Configuration file '$($script:Config.ConfigFilename)' not found." -ForegroundColor $script:Config.ColorWarning
         }
 
         # prompt for template-folder if needed
         if ($needsPrompt) {
-            Write-Host "Set your template folder (drag and drop, copy/paste or type the path)." -ForegroundColor Yellow
+            Write-Host "Set your template folder (drag and drop, copy/paste or type the path)." -ForegroundColor $script:Config.ColorWarning
             Write-Host ""
 
             $resolved = $null
@@ -230,11 +241,11 @@ function Read-Config {
                         $resolved = $candidate
                     }
                     else {
-                        Write-Host "Path exists but is not a folder. Try again." -ForegroundColor Red
+                        Write-Host "Path exists but is not a folder. Try again." -ForegroundColor $script:Config.ColorError
                     }
                 }
                 catch {
-                    Write-Host "Path not found or access denied. Try again." -ForegroundColor Red
+                    Write-Host "Path not found or access denied. Try again." -ForegroundColor $script:Config.ColorError
                 }
             }
 
@@ -250,8 +261,8 @@ function Read-Config {
                 }
             }
             catch {
-                Write-Host "Unable to write configuration file: $($_.Exception.Message)" -ForegroundColor Red
-                Write-Host "Please add the configuration file manually and restart." -ForegroundColor Red
+                Write-Host "Unable to write configuration file: $($_.Exception.Message)" -ForegroundColor $script:Config.ColorError
+                Write-Host "Please add the configuration file manually and restart." -ForegroundColor $script:Config.ColorError
                 Read-Host
                 exit
             }
@@ -270,10 +281,16 @@ function Read-Config {
         $intValue = 0
         $boolValue = $false
         if ($config.ContainsKey('NumberOfResults') -and [int]::TryParse($config['NumberOfResults'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.NumberOfResults = $intValue }
-        if ($config.ContainsKey('SearchWeightTitle') -and [int]::TryParse($config['SearchWeightTitle'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightTitle = $intValue }
-        if ($config.ContainsKey('SearchWeightPath') -and [int]::TryParse($config['SearchWeightPath'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightPath = $intValue }
-        if ($config.ContainsKey('SearchWeightKeywords') -and [int]::TryParse($config['SearchWeightKeywords'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightKeywords = $intValue }
-        if ($config.ContainsKey('SearchWeightContent') -and [int]::TryParse($config['SearchWeightContent'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightContent = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightTitle') -and [int]::TryParse($config['SearchDimensionWeightTitle'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightTitle = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightPath') -and [int]::TryParse($config['SearchDimensionWeightPath'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightPath = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightKeywords') -and [int]::TryParse($config['SearchDimensionWeightKeywords'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightKeywords = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightContent') -and [int]::TryParse($config['SearchDimensionWeightContent'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightContent = $intValue }
+        if ($config.ContainsKey('SearchMatchWeightExact') -and [int]::TryParse($config['SearchMatchWeightExact'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightExact = $intValue }
+        if ($config.ContainsKey('SearchMatchWeightPrefix') -and [int]::TryParse($config['SearchMatchWeightPrefix'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightPrefix = $intValue }
+        if ($config.ContainsKey('SearchMatchWeightSubstring') -and [int]::TryParse($config['SearchMatchWeightSubstring'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightSubstring = $intValue }
+        if ($config.ContainsKey('ColorHighlight')) { try { $script:Config.ColorHighlight = [string][System.ConsoleColor]$config['ColorHighlight'] } catch {} }
+        if ($config.ContainsKey('ColorWarning')) { try { $script:Config.ColorWarning = [string][System.ConsoleColor]$config['ColorWarning'] } catch {} }
+        if ($config.ContainsKey('ColorError')) { try { $script:Config.ColorError = [string][System.ConsoleColor]$config['ColorError'] } catch {} }
         if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
         if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
         if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
@@ -281,10 +298,10 @@ function Read-Config {
         # validate template folder
         $templateFolder = $config[$keyName]
         if (!(Test-Path -Path $templateFolder -PathType Container)) {
-            Write-Host "Template folder not found: $templateFolder" -ForegroundColor Red
-            Write-Host "Update '$($script:Config.ConfigFilename)' or delete it to reconfigure." -ForegroundColor Red
+            Write-Host "Template folder not found: $templateFolder" -ForegroundColor $script:Config.ColorError
+            Write-Host "Update '$($script:Config.ConfigFilename)' or delete it to reconfigure." -ForegroundColor $script:Config.ColorError
             Write-Host ""
-            Write-Host "Press any key to exit." -ForegroundColor Red
+            Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorError
             Read-Host
             exit
         }
@@ -307,35 +324,34 @@ function Search-Template {
         [string] $Query
     )
     process {
-        # split query into individual terms
-        $splitQueries = $Query.Split(" ").Trim()
+        # preprocess query: lowercase, normalize, split, unique
+        $queryFragments = ConvertTo-SearchWords -Text $Query
 
-        # score each template against each query term
+        # score each template against each query fragment
         $results = foreach ($template in $templates) {
 
             $score = 0
-            ForEach ($splitQuery in $splitQueries) {
+            foreach ($fragment in $queryFragments) {
 
-                # title
-                if ($template.Title -like "*$splitQuery*") {
-                    $score += $script:Config.SearchWeightTitle
-                }
-
-                # relative path
-                if ($template.RelativePath -like "*$splitQuery*") {
-                    $score += $script:Config.SearchWeightPath
-                }
-
-                # keywords
-                ForEach ($keyword in $template.Keywords) {
-                    if ($keyword -like "*$splitQuery*") {
-                        $score += $script:Config.SearchWeightKeywords
+                foreach ($dimension in @(
+                        @{ Words = $template.Search.TitleWords; Weight = $script:Config.SearchDimensionWeightTitle },
+                        @{ Words = $template.Search.KeywordWords; Weight = $script:Config.SearchDimensionWeightKeywords },
+                        @{ Words = $template.Search.PathWords; Weight = $script:Config.SearchDimensionWeightPath },
+                        @{ Words = $template.Search.ContentWords; Weight = $script:Config.SearchDimensionWeightContent }
+                    )) {
+                    $dimensionScore = 0
+                    foreach ($word in $dimension.Words) {
+                        if ($word -eq $fragment) {
+                            $dimensionScore += $script:Config.SearchMatchWeightExact
+                        }
+                        elseif ($word.StartsWith($fragment)) {
+                            $dimensionScore += $script:Config.SearchMatchWeightPrefix
+                        }
+                        elseif ($word.Contains($fragment)) {
+                            $dimensionScore += $script:Config.SearchMatchWeightSubstring
+                        }
                     }
-                }
-
-                # content
-                if ($template.Content -like "*$splitQuery*") {
-                    $score += $script:Config.SearchWeightContent
+                    $score += $dimensionScore * $dimension.Weight
                 }
             }
 
@@ -352,6 +368,40 @@ function Search-Template {
         | Select-Object -First $script:Config.NumberOfResults
 
         return $results
+    }
+}
+
+function Write-ContentWithHighlights {
+    param(
+        [string]$Content,
+        [string[]]$Fragments
+    )
+    process {
+        if (-not $Fragments -or $Fragments.Count -eq 0) {
+            Write-Host $Content
+            return
+        }
+
+        $pattern = ($Fragments | ForEach-Object { [regex]::Escape($_) }) -join '|'
+        $matchList = [regex]::Matches($Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+        if ($matchList.Count -eq 0) {
+            Write-Host $Content
+            return
+        }
+
+        $pos = 0
+        foreach ($m in $matchList | Sort-Object Index) {
+            if ($m.Index -gt $pos) {
+                Write-Host $Content.Substring($pos, $m.Index - $pos) -NoNewline
+            }
+            Write-Host $Content.Substring($m.Index, $m.Length) -NoNewline -ForegroundColor $script:Config.ColorHighlight
+            $pos = $m.Index + $m.Length
+        }
+        if ($pos -lt $Content.Length) {
+            Write-Host $Content.Substring($pos) -NoNewline
+        }
+        Write-Host ""
     }
 }
 
@@ -395,7 +445,7 @@ function Write-Results {
 
             # write + color
             if ($cnt -eq $Selection) {
-                Write-Host $printStr -ForegroundColor Cyan
+                Write-Host $printStr -ForegroundColor $script:Config.ColorHighlight
             }
             else {
                 Write-Host $printStr
@@ -432,6 +482,29 @@ function Get-TemplatesFromFolder {
         Write-Progress -Activity "Processing templates" -Completed
 
         return $templates
+    }
+}
+
+function ConvertTo-SearchWords {
+    param(
+        [string]$Text
+    )
+    process {
+        if ([string]::IsNullOrWhiteSpace($Text)) { return @() }
+
+        $s = $Text.ToLowerInvariant()
+
+        # strip diacritics: decompose to NFD, remove combining marks, recompose
+        $s = $s.Normalize([System.Text.NormalizationForm]::FormD)
+        $s = [System.Text.RegularExpressions.Regex]::Replace($s, '\p{Mn}', '')
+        $s = $s.Normalize([System.Text.NormalizationForm]::FormC)
+
+        # split on any non-alphanumeric run (spaces, _, -, \, /, . etc.)
+        $words = [System.Text.RegularExpressions.Regex]::Split($s, '[^a-z0-9]+') |
+        Where-Object { $_ -ne '' } |
+        Select-Object -Unique
+
+        return @($words)
     }
 }
 
@@ -478,7 +551,6 @@ function Get-TemplateFromFile {
             RelativePath  = $relativePath
             Keywords      = $keywords
             Content       = $content
-            Score         = 0
             File          = $FilePath
             LastWriteTime = $lastWriteTime
         }
@@ -503,15 +575,15 @@ function Convert-TemplatesToJSON {
         if (@($templates).Count -eq 0) {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
             Write-Host ""
-            Write-Host "Your template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
-            Write-Host "Add your first template to $($Folder) and restart $($script:AppName)." -ForegroundColor Yellow
+            Write-Host "Your template folder doesn't contain any template text files (*.txt)." -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Add your first template to $($Folder) and restart $($script:AppName)." -ForegroundColor $script:Config.ColorWarning
             Write-Host ""
-            Write-Host "Press any key to exit." -ForegroundColor Yellow
+            Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorWarning
             Read-Host
             exit
         }
 
-        $templates | ConvertTo-Json | Out-File -FilePath $JSONFile -Encoding UTF8
+        $templates | ConvertTo-Json -Depth 3 | Out-File -FilePath $JSONFile -Encoding UTF8
     }
 }
 
@@ -529,13 +601,30 @@ function Import-TemplatesFromJSON {
         }
         catch {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
-            Write-Host "Template cache is corrupt and has been removed. Restart to rebuild it." -ForegroundColor Red
+            Write-Host "Template cache is corrupt and has been removed. Restart to rebuild it." -ForegroundColor $script:Config.ColorError
             Write-Host ""
-            Write-Host "Press any key to exit." -ForegroundColor Red
+            Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorError
             Read-Host
             exit
         }
         return $templates
+    }
+}
+
+function Add-SearchWords {
+    param($Templates)
+    process {
+        foreach ($template in $Templates) {
+            $template | Add-Member -NotePropertyName Search -NotePropertyValue (
+                [PSCustomObject]@{
+                    TitleWords   = @(ConvertTo-SearchWords -Text $template.Title)
+                    KeywordWords = @(@($template.Keywords) | ForEach-Object { ConvertTo-SearchWords -Text $_ } | Select-Object -Unique)
+                    ContentWords = @(ConvertTo-SearchWords -Text $template.Content)
+                    PathWords    = @(ConvertTo-SearchWords -Text $template.RelativePath)
+                }
+            )
+        }
+        return $Templates
     }
 }
 
@@ -547,6 +636,9 @@ function Import-Templates {
     )
     process {
 
+        $script:Stats.RebuildCacheMs = 0
+        $script:Stats.PreprocessMs = 0
+
         # check template cache
         Write-Host "- Checking templates..."
         $isJSON = Test-Path -Path $script:Config.TemplateCacheFile -Type Leaf
@@ -554,12 +646,22 @@ function Import-Templates {
         # rebuild cache from .txt files if missing or forced
         if ($ForceReload -or !$isJSON) {
             Write-Host "- Reloading templates from folder..."
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
             Convert-TemplatesToJSON -Folder $script:Config.TemplateFolder -JSONFile $script:Config.TemplateCacheFile
+            $sw.Stop()
+            $script:Stats.RebuildCacheMs = $sw.ElapsedMilliseconds
         }
 
         # load templates from cache
         Write-Host "- Importing templates..."
         $templates = Import-TemplatesFromJSON -JSONFile $script:Config.TemplateCacheFile
+
+        # preprocess search words in memory
+        Write-Host "- Preprocessing search index..."
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $templates = Add-SearchWords -Templates $templates
+        $sw.Stop()
+        $script:Stats.PreprocessMs = $sw.ElapsedMilliseconds
 
         return $templates
     }
@@ -578,7 +680,7 @@ function Write-Info {
         $lastWriteTimeCache_str = $lastWriteTimeCache.ToString("dd-MM-yyyy HH:mm")
         Write-Host "Last reload of templates:   " -NoNewline
         if ($lastWriteTimeCache -lt (Get-Date).AddMonths(-1)) {
-            Write-Host "$($lastWriteTimeCache_str) Cache outdated. Run 'r' to reload." -ForegroundColor Red
+            Write-Host "$($lastWriteTimeCache_str) Cache outdated. Run 'r' to reload." -ForegroundColor $script:Config.ColorError
         }
         else {
             Write-Host $lastWriteTimeCache_str
@@ -589,13 +691,18 @@ function Write-Info {
 
         if ($script:Config.VerboseMode) {
             Write-Host ""
-            Write-Host "PowerShell version:         $($PSVersionTable.PSVersion.ToString())"  -ForegroundColor Yellow
-            Write-Host "Script file:                $($PSCommandPath)" -ForegroundColor Yellow
-            Write-Host "Config file:                $(Join-Path (Split-Path -Parent $PSCommandPath) $script:Config.ConfigFilename)" -ForegroundColor Yellow
-            Write-Host "Cache file:                 $($script:Config.TemplateCacheFile)" -ForegroundColor Yellow
-            Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor Yellow
-            Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor Yellow
-            Write-Host "Search weights:             title=$($script:Config.SearchWeightTitle)  path=$($script:Config.SearchWeightPath)  keywords=$($script:Config.SearchWeightKeywords)  content=$($script:Config.SearchWeightContent)" -ForegroundColor Yellow
+            Write-Host "PowerShell version:         $($PSVersionTable.PSVersion.ToString())"  -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Script file:                $($PSCommandPath)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Config file:                $(Join-Path (Split-Path -Parent $PSCommandPath) $script:Config.ConfigFilename)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Cache file:                 $($script:Config.TemplateCacheFile)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Search dimension weights:   title=$($script:Config.SearchDimensionWeightTitle)  path=$($script:Config.SearchDimensionWeightPath)  keywords=$($script:Config.SearchDimensionWeightKeywords)  content=$($script:Config.SearchDimensionWeightContent)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Search match weights:       exact=$($script:Config.SearchMatchWeightExact)  prefix=$($script:Config.SearchMatchWeightPrefix)  substring=$($script:Config.SearchMatchWeightSubstring)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Colors:                     selection=$($script:Config.ColorHighlight)  warning=$($script:Config.ColorWarning)  error=$($script:Config.ColorError)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host ""
+            Write-Host "Rebuild cache (ms):         $($script:Stats.RebuildCacheMs)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Preprocess templates (ms):  $($script:Stats.PreprocessMs)" -ForegroundColor $script:Config.ColorWarning
         }
     }
 }
@@ -628,6 +735,7 @@ function Start-TextTemplateTool {
         $topResults = $null
         $selection = 1
         $style = "search"
+        $currentFragments = @()
         do {
             Write-Host ""
             Write-Host "--------------------------------------------------------------------------------"
@@ -641,6 +749,7 @@ function Start-TextTemplateTool {
                 $topResults = $null
                 $selection = 1
                 $style = "search"
+                $currentFragments = @()
 
                 Write-StartupScreen
                 continue
@@ -651,6 +760,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
+                $currentFragments = @()
 
                 Write-Host "Available commands:"
                 Write-Host ""
@@ -699,6 +809,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
+                $currentFragments = @()
 
                 Write-Header
                 $templates = Import-Templates -ForceReload
@@ -712,6 +823,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
+                $currentFragments = @()
 
                 Start-Process $script:Config.TemplateFolder
 
@@ -720,9 +832,10 @@ function Start-TextTemplateTool {
             }
             elseif ($query -eq "m") {
 
+                $currentFragments = @()
                 $topResults = ForEach ($template in $templates) {
                     [PSCustomObject]@{
-                        Template = $template
+                        Template      = $template
                         LastWriteTime = $template.LastWriteTime
                     }
                 }
@@ -742,23 +855,20 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
+                $currentFragments = @()
 
                 Write-Info -Templates $templates
                 continue
             }
 
             # check for selection inputs
-            elseif ( $topResults -and ($query -match '^[1-9]\d*$') ) {
-                if ([int]$query -gt $topResults.Count) {
-                    $selection = 1
-                }
-                else {
-                    $selection = [int]$query
-                }
+            elseif ( $topResults -and ($query -match '^[1-9]\d*$') -and ([int]$query -le @($topResults).Count) ) {
+                $selection = [int]$query
             }
 
             # search query
             else {
+                $currentFragments = ConvertTo-SearchWords -Text $query
                 $topResults = Search-Template -Templates $templates -Query $query
                 $selection = 1
                 $style = "search"
@@ -775,10 +885,10 @@ function Start-TextTemplateTool {
                 
                 if (-not [string]::IsNullOrWhiteSpace($template.Content)) {
                     Set-ClipboardSafe $template.Content
-                    Write-Host $template.Content
+                    Write-ContentWithHighlights -Content $template.Content -Fragments $currentFragments
                 }
                 else {
-                    Write-Host "Empty template file." -ForegroundColor Yellow
+                    Write-Host "Empty template file." -ForegroundColor $script:Config.ColorWarning
                 }
 
                 Write-Host ""
