@@ -1,0 +1,27 @@
+KEYWORDS: phone, directory, contact, number, extension, helpdesk, reception, it, hr, finance, office
+Company Phone Directory
+
+Reception
+  Main line:          +41 44 123 10 00
+  Fax:                +41 44 123 10 01
+
+IT Helpdesk
+  Support hotline:    +41 44 123 11 00
+  Emergency (24/7):   +41 44 123 11 99
+
+Human Resources
+  HR general:         +41 44 123 12 00
+  Payroll:            +41 44 123 12 10
+
+Finance & Accounting
+  Accounting:         +41 44 123 13 00
+  Controlling:        +41 44 123 13 10
+  Accounts payable:   +41 44 123 13 20
+
+Facility Management
+  Building mgmt:      +41 44 123 14 00
+  Security desk:      +41 44 123 14 50
+
+Management
+  CEO office:         +41 44 123 15 00
+  COO office:         +41 44 123 15 10
