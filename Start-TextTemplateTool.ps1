@@ -53,6 +53,9 @@ $script:Config = @{
     # will be set during runtime in Read-Config
     TemplateFolder                = ""
     TemplateCacheFile             = ""
+
+    # TEMP fpor testing different clipboard methods, can be set in config file
+    TempSelectClipboardFunction   = 2
 }
 
 $script:Stats = @{
@@ -65,66 +68,71 @@ function Set-ClipboardSafe {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Text,
-        
+
         [int]$TimeoutMs = 2000,
         [int]$MaxRetries = 2
     )
 
-    $attempt = 0
-    while ($attempt -le $MaxRetries) {
-        $runspace = $null
-        $powershell = $null
-        
-        try {
-            $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
-            $runspace.ApartmentState = [System.Threading.ApartmentState]::STA
-            $runspace.Open()
+    # TEMP for testing different clipboard methods, can be set in config file
+    switch ($script:Config.TempSelectClipboardFunction) {
 
-            $powershell = [PowerShell]::Create()
-            $powershell.Runspace = $runspace
+        1 {
+            # simple Set-Clipboard cmdlet
+            Set-Clipboard -Value $Text
+        }
 
-            $null = $powershell.AddScript({
-                    param($text)
-                    # Use lower-level API with retry capability if possible
-                    Add-Type -AssemblyName System.Windows.Forms
-                    [System.Windows.Forms.Clipboard]::SetText($text)
-                }).AddArgument($Text)
+        2 {
+            # clip.exe via stdin
+            $Text | clip
+        }
 
-            $async = $powershell.BeginInvoke()
+        default {
+            # STA runspace with Windows.Forms (version 2)
+            $attempt = 0
+            while ($attempt -le $MaxRetries) {
+                $runspace = $null
+                $powershell = $null
 
-            if ($async.AsyncWaitHandle.WaitOne($TimeoutMs)) {
-                # Success path
-                $null = $powershell.EndInvoke($async)
-                return # Exit function
-            } 
-            else {
-                # Timeout
-                $powershell.Stop()
-                $attempt++
-                if ($attempt -le $MaxRetries) {
-                    Start-Sleep -Milliseconds 300
+                try {
+                    $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+                    $runspace.ApartmentState = [System.Threading.ApartmentState]::STA
+                    $runspace.Open()
+
+                    $powershell = [PowerShell]::Create()
+                    $powershell.Runspace = $runspace
+
+                    $null = $powershell.AddScript({
+                            param($text)
+                            Add-Type -AssemblyName System.Windows.Forms
+                            [System.Windows.Forms.Clipboard]::SetText($text)
+                        }).AddArgument($Text)
+
+                    $async = $powershell.BeginInvoke()
+
+                    if ($async.AsyncWaitHandle.WaitOne($TimeoutMs)) {
+                        $null = $powershell.EndInvoke($async)
+                        return
+                    }
+                    else {
+                        $powershell.Stop()
+                        $attempt++
+                        if ($attempt -le $MaxRetries) { Start-Sleep -Milliseconds 300 }
+                    }
+                }
+                catch {
+                    Write-Warning "Clipboard operation failed (attempt $attempt): $($_.Exception.Message)"
+                    $attempt++
+                    if ($attempt -le $MaxRetries) { Start-Sleep -Milliseconds 300 }
+                }
+                finally {
+                    if ($powershell) { $powershell.Dispose() }
+                    if ($runspace) { $runspace.Close(); $runspace.Dispose() }
                 }
             }
-        }
-        catch {
-            Write-Warning "Clipboard operation failed (attempt $attempt): $($_.Exception.Message)"
-            $attempt++
-            if ($attempt -le $MaxRetries) {
-                Start-Sleep -Milliseconds 300
-            }
-        }
-        finally {
-            if ($powershell) { 
-                $powershell.Dispose() 
-            }
-            if ($runspace) { 
-                $runspace.Close()
-                $runspace.Dispose()
-            }
+
+            Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor $script:Config.ColorWarning
         }
     }
-
-    Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor $script:Config.ColorWarning
 }
 function Write-Header {
     param(
@@ -294,6 +302,9 @@ function Read-Config {
         if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
         if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
         if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
+
+        # TEMP for testing different clipboard methods, can be set in config file
+         if ($config.ContainsKey('TempSelectClipboardFunction') -and [int]::TryParse($config['TempSelectClipboardFunction'], [ref]$intValue) -and $intValue -ge 1 -and $intValue -le 3) { $script:Config.TempSelectClipboardFunction = $intValue }
 
         # validate template folder
         $templateFolder = $config[$keyName]
