@@ -385,15 +385,19 @@ function Search-Template {
 function Write-ContentWithHighlights {
     param(
         [string]$Content,
-        [string[]]$Fragments
+        [string]$Query
     )
     process {
-        if (-not $Fragments -or $Fragments.Count -eq 0) {
+        if ([string]::IsNullOrWhiteSpace($Query)) {
             Write-Host $Content
             return
         }
 
-        $pattern = ($Fragments | ForEach-Object { [regex]::Escape($_) }) -join '|'
+        # union of raw terms (preserves diacritics/casing) and preprocessed fragments (diacritics stripped)
+        $rawTerms          = @($Query -split '\s+' | Where-Object { $_ -ne '' })
+        $preprocessedTerms = @(ConvertTo-SearchWords -Text $Query)
+        $terms             = @($rawTerms + $preprocessedTerms | Select-Object -Unique)
+        $pattern           = ($terms | ForEach-Object { [regex]::Escape($_) }) -join '|'
         $matchList = [regex]::Matches($Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
         if ($matchList.Count -eq 0) {
@@ -746,7 +750,7 @@ function Start-TextTemplateTool {
         $topResults = $null
         $selection = 1
         $style = "search"
-        $currentFragments = @()
+        $currentQuery = ""
         do {
             Write-Host ""
             Write-Host "--------------------------------------------------------------------------------"
@@ -760,7 +764,7 @@ function Start-TextTemplateTool {
                 $topResults = $null
                 $selection = 1
                 $style = "search"
-                $currentFragments = @()
+                $currentQuery = ""
 
                 Write-StartupScreen
                 continue
@@ -771,7 +775,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
-                $currentFragments = @()
+                $currentQuery = ""
 
                 Write-Host "Available commands:"
                 Write-Host ""
@@ -820,7 +824,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
-                $currentFragments = @()
+                $currentQuery = ""
 
                 Write-Header
                 $templates = Import-Templates -ForceReload
@@ -834,7 +838,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
-                $currentFragments = @()
+                $currentQuery = ""
 
                 Start-Process $script:Config.TemplateFolder
 
@@ -843,7 +847,7 @@ function Start-TextTemplateTool {
             }
             elseif ($query -eq "m") {
 
-                $currentFragments = @()
+                $currentQuery = ""
                 $topResults = ForEach ($template in $templates) {
                     [PSCustomObject]@{
                         Template      = $template
@@ -866,7 +870,7 @@ function Start-TextTemplateTool {
                 # reset TUI state
                 $topResults = $null
                 $selection = 1
-                $currentFragments = @()
+                $currentQuery = ""
 
                 Write-Info -Templates $templates
                 continue
@@ -879,7 +883,7 @@ function Start-TextTemplateTool {
 
             # search query
             else {
-                $currentFragments = ConvertTo-SearchWords -Text $query
+                $currentQuery = $query
                 $topResults = Search-Template -Templates $templates -Query $query
                 $selection = 1
                 $style = "search"
@@ -896,7 +900,7 @@ function Start-TextTemplateTool {
                 
                 if (-not [string]::IsNullOrWhiteSpace($template.Content)) {
                     Set-ClipboardSafe $template.Content
-                    Write-ContentWithHighlights -Content $template.Content -Fragments $currentFragments
+                    Write-ContentWithHighlights -Content $template.Content -Query $currentQuery
                 }
                 else {
                     Write-Host "Empty template file." -ForegroundColor $script:Config.ColorWarning
