@@ -566,17 +566,27 @@ function Write-Info {
         $Templates
     )
     process {
-        Write-Host "Template folder:            $($script:Config.TemplateFolder)"
         Write-Host "Template count:             $(@($Templates).Count)"
+        
+        $lastWriteTimeCache = (Get-ChildItem -Path $script:Config.TemplateCacheFile).LastWriteTime
+        $lastWriteTimeCache_str = $lastWriteTimeCache.ToString("dd-MM-yyyy HH:mm")
+        Write-Host "Last reload of templates:   " -NoNewline
+        if ($lastWriteTimeCache -lt (Get-Date).AddMonths(-1)) {
+            Write-Host "$($lastWriteTimeCache_str) Cache outdated. Run 'r' to reload." -ForegroundColor Red
+        }
+        else {
+            Write-Host $lastWriteTimeCache_str
+        }
 
-        $lastWriteTime_json_str = (Get-ChildItem -Path $script:Config.TemplateCacheFile).LastWriteTime.ToString("dd-MM-yyyy HH:mm")
-        Write-Host "Last reload of templates:   $($lastWriteTime_json_str)"
+        Write-Host "Template folder:            $($script:Config.TemplateFolder)"
+        Write-Host "TTT and config location:    $(Split-Path -Parent $PSCommandPath)"
 
         if ($script:Config.VerboseMode) {
             Write-Host ""
             Write-Host "PowerShell version:         $($PSVersionTable.PSVersion.ToString())"  -ForegroundColor Yellow
-            Write-Host "Script location:            $(Split-Path -Parent $PSCommandPath)" -ForegroundColor Yellow
-            Write-Host "Template cache file:        $($script:Config.TemplateCacheFile)" -ForegroundColor Yellow
+            Write-Host "Script file:                $($PSCommandPath)" -ForegroundColor Yellow
+            Write-Host "Config file:                $(Join-Path (Split-Path -Parent $PSCommandPath) $script:Config.ConfigFilename)" -ForegroundColor Yellow
+            Write-Host "Cache file:                 $($script:Config.TemplateCacheFile)" -ForegroundColor Yellow
             Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor Yellow
             Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor Yellow
             Write-Host "Search weights:             title=$($script:Config.SearchWeightTitle)  path=$($script:Config.SearchWeightPath)  keywords=$($script:Config.SearchWeightKeywords)  content=$($script:Config.SearchWeightContent)" -ForegroundColor Yellow
