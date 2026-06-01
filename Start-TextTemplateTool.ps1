@@ -292,7 +292,7 @@ function Read-Config {
         $script:Config.TemplateCacheFile = Join-Path $scriptDir $script:Config.TemplateCacheFilename
 
         # set verbose mode if enabled in config
-        if ($script:Config.VerboseMode) { $script:VerbosePreference = 'Continue' } else { $script:VerbosePreference = 'SilentlyContinue' }
+        if ($script:Config.VerboseMode) { $globaL:VerbosePreference = 'Continue' } else { $globaL:VerbosePreference = 'SilentlyContinue' }
     }
 }
 
@@ -566,7 +566,6 @@ function Write-Info {
         $Templates
     )
     process {
-
         Write-Host "Template folder:            $($script:Config.TemplateFolder)"
         Write-Host "Template count:             $(@($Templates).Count)"
 
