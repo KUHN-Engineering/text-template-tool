@@ -806,7 +806,7 @@ function Start-TextTemplateTool {
                     Start-Process $topResults[$selection - 1].Template.File
                 }
                 else {
-                    Write-Host "No template selected. Search first, then open with 'o'."
+                    Write-Host "No template selected. Search first, then open with 'o'." -ForegroundColor $script:Config.ColorWarning
                     continue
                 }
             }
@@ -816,7 +816,7 @@ function Start-TextTemplateTool {
                     Start-Process $parentFolder
                 }
                 else {
-                    Write-Host "No template selected. Search first, then open the parent folder with 'p'."
+                    Write-Host "No template selected. Search first, then open the parent folder with 'p'." -ForegroundColor $script:Config.ColorWarning
                     continue
                 }
             }
