@@ -311,11 +311,10 @@ function Search-Template {
         $splitQueries = $Query.Split(" ").Trim()
 
         # score each template against each query term
-        ForEach ($template in $templates) {
+        $results = foreach ($template in $templates) {
 
-            $template.Score = 0
+            $score = 0
             ForEach ($splitQuery in $splitQueries) {
-                $score = 0
 
                 # title
                 if ($template.Title -like "*$splitQuery*") {
@@ -338,13 +337,17 @@ function Search-Template {
                 if ($template.Content -like "*$splitQuery*") {
                     $score += $script:Config.SearchWeightContent
                 }
+            }
 
-                $template.Score += $score
+            if ($score -gt 0) {
+                [PSCustomObject]@{
+                    Template = $template
+                    Score    = $score
+                }
             }
         }
         
-        $results = $templates `
-        | Where-Object { $_.Score -gt 0 } `
+        $results = $results `
         | Sort-Object -Property Score -Descending `
         | Select-Object -First $script:Config.NumberOfResults
 
@@ -356,7 +359,7 @@ function Write-Results {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        $Templates,
+        $Results,
         [Parameter(Mandatory = $false)]
         $Selection = 1,
         [Parameter(Mandatory = $false)]
@@ -365,7 +368,9 @@ function Write-Results {
     process {
 
         $cnt = 0
-        ForEach ($template in $templates) {
+        ForEach ($result in $Results) {
+
+            $template = $result.Template
 
             # header
             if ($cnt -eq 0) {
@@ -385,7 +390,7 @@ function Write-Results {
             }
             else {
                 # "search"
-                $printStr = " $cntStr | $($template.Title) [$($template.Score)]"
+                $printStr = " $cntStr | $($template.Title) [$($result.Score)]"
             }
 
             # write + color
@@ -422,7 +427,7 @@ function Get-TemplatesFromFolder {
                 -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
                 -PercentComplete $percentComplete
 
-            Get-TemplateFromFile -FilePath $file -BaseFolder $TemplateFolder
+            Get-TemplateFromFile -FilePath $file -BaseFolder $folder
         }
         Write-Progress -Activity "Processing templates" -Completed
 
@@ -495,7 +500,7 @@ function Convert-TemplatesToJSON {
     process {
         $templates = Get-TemplatesFromFolder -TemplateFolder $Folder
 
-        if (!$templates) {
+        if (@($templates).Count -eq 0) {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
             Write-Host ""
             Write-Host "Your template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
@@ -673,7 +678,7 @@ function Start-TextTemplateTool {
             }
             elseif ($query -eq "o") {
                 if ($topResults) {
-                    Start-Process $topResults[$selection - 1].File
+                    Start-Process $topResults[$selection - 1].Template.File
                 }
                 else {
                     Write-Host "No template selected. Search first, then open with 'o'."
@@ -682,7 +687,7 @@ function Start-TextTemplateTool {
             }
             elseif ($query -eq "p") {
                 if ($topResults) {
-                    $parentFolder = Split-Path -Path $topResults[$selection - 1].File -Parent
+                    $parentFolder = Split-Path -Path $topResults[$selection - 1].Template.File -Parent
                     Start-Process $parentFolder
                 }
                 else {
@@ -715,12 +720,20 @@ function Start-TextTemplateTool {
             }
             elseif ($query -eq "m") {
 
-                $topResults = $templates | Sort-Object LastWriteTime -Descending | Select-Object -First $script:Config.NumberOfResults
+                $topResults = ForEach ($template in $templates) {
+                    [PSCustomObject]@{
+                        Template = $template
+                        LastWriteTime = $template.LastWriteTime
+                    }
+                }
+                
+                $topResults = $topResults | Sort-Object LastWriteTime -Descending | Select-Object -First $script:Config.NumberOfResults
+                
                 $selection = 1
                 $style = "modified"
 
                 # no template found
-                if (!$topResults) {
+                if (@($topResults).Count -eq 0) {
                     Write-Host "No matching template found."
                     continue
                 }
@@ -751,14 +764,14 @@ function Start-TextTemplateTool {
                 $style = "search"
 
                 # no template found
-                if (!$topResults) {
+                if (@($topResults).Count -eq 0) {
                     Write-Host "No matching template found."
                     continue
                 }
             }
 
             if ($topResults) {
-                $template = $topResults[$selection - 1]
+                $template = $topResults[$selection - 1].Template
                 
                 if (-not [string]::IsNullOrWhiteSpace($template.Content)) {
                     Set-ClipboardSafe $template.Content
@@ -771,7 +784,7 @@ function Start-TextTemplateTool {
                 Write-Host ""
                 Write-Host "--------------------------------------------------------------------------------"
                 Write-Host ""
-                Write-Results -Templates $topResults -Selection $selection -Style $style
+                Write-Results -Results $topResults -Selection $selection -Style $style
             }
 
         } while ( $true )
