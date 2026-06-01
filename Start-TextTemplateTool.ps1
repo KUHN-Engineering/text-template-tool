@@ -269,11 +269,11 @@ function Read-Config {
         # apply optional config overrides
         $intValue = 0
         $boolValue = $false
-        if ($config.ContainsKey('NumberOfResults') -and [int]::TryParse($config['NumberOfResults'], [ref]$intValue)) { $script:Config.NumberOfResults = $intValue }
-        if ($config.ContainsKey('SearchWeightTitle') -and [int]::TryParse($config['SearchWeightTitle'], [ref]$intValue)) { $script:Config.SearchWeightTitle = $intValue }
-        if ($config.ContainsKey('SearchWeightPath') -and [int]::TryParse($config['SearchWeightPath'], [ref]$intValue)) { $script:Config.SearchWeightPath = $intValue }
-        if ($config.ContainsKey('SearchWeightKeywords') -and [int]::TryParse($config['SearchWeightKeywords'], [ref]$intValue)) { $script:Config.SearchWeightKeywords = $intValue }
-        if ($config.ContainsKey('SearchWeightContent') -and [int]::TryParse($config['SearchWeightContent'], [ref]$intValue)) { $script:Config.SearchWeightContent = $intValue }
+        if ($config.ContainsKey('NumberOfResults') -and [int]::TryParse($config['NumberOfResults'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.NumberOfResults = $intValue }
+        if ($config.ContainsKey('SearchWeightTitle') -and [int]::TryParse($config['SearchWeightTitle'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightTitle = $intValue }
+        if ($config.ContainsKey('SearchWeightPath') -and [int]::TryParse($config['SearchWeightPath'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightPath = $intValue }
+        if ($config.ContainsKey('SearchWeightKeywords') -and [int]::TryParse($config['SearchWeightKeywords'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightKeywords = $intValue }
+        if ($config.ContainsKey('SearchWeightContent') -and [int]::TryParse($config['SearchWeightContent'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchWeightContent = $intValue }
         if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
         if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
         if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
