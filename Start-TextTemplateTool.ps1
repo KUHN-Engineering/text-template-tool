@@ -42,6 +42,7 @@ $script:Config = @{
     NumberOfResults       = 10
     VerboseMode           = $false
     ReloadCacheOnStartup  = $false
+    StartupMessage        = ""
 
     # will be set during runtime in Read-Config
     TemplateFolder        = ""
@@ -115,12 +116,19 @@ function Set-ClipboardSafe {
     Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor Yellow
 }
 function Write-Header {
+    param(
+        [switch]$ShowStartupMessage
+    )
     process {
         Clear-Host
         Write-Host "################################################################################"
         Write-Host "# TTT - Text Template Tool by KUHN Engineering                          (V$($script:AppVersion))"
         Write-Host "################################################################################"
-        Write-Host ""
+        if ($ShowStartupMessage -and -not [string]::IsNullOrWhiteSpace($script:Config.StartupMessage)) {
+            Write-Host $script:Config.StartupMessage -ForegroundColor Cyan
+        } else {
+            Write-Host ""
+        }
     }
 }
 
@@ -134,7 +142,7 @@ function Write-StartupScreen {
         Write-Host ""
         Write-Host ""
         Write-Host ""
-        Write-Host "Enter command 'h' for help."
+        Write-Host "Type to search, 'h' for help, 'r' to reload templates."
     }
 }
 
@@ -267,6 +275,7 @@ function Read-Config {
         if ($config.ContainsKey('SearchWeightContent') -and [int]::TryParse($config['SearchWeightContent'], [ref]$intValue)) { $script:Config.SearchWeightContent = $intValue }
         if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
         if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
+        if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
 
         # validate template folder
         $templateFolder = $config[$keyName]
@@ -568,7 +577,7 @@ function Write-Info {
             Write-Host ""
             Write-Host "PowerShell version:         $($PSVersionTable.PSVersion.ToString())"  -ForegroundColor Yellow
             Write-Host "Script location:            $(Split-Path -Parent $PSCommandPath)" -ForegroundColor Yellow
-            Write-Host "Template cache file:        $($script:Config.TemplateCacheFile)" -ForegroundColor Yello
+            Write-Host "Template cache file:        $($script:Config.TemplateCacheFile)" -ForegroundColor Yellow
             Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor Yellow
             Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor Yellow
             Write-Host "Search weights:             title=$($script:Config.SearchWeightTitle)  path=$($script:Config.SearchWeightPath)  keywords=$($script:Config.SearchWeightKeywords)  content=$($script:Config.SearchWeightContent)" -ForegroundColor Yellow
@@ -597,7 +606,7 @@ function Start-TextTemplateTool {
         $templates = Import-Templates -ForceReload:$script:Config.ReloadCacheOnStartup
 
         # show startup screen
-        Write-Header
+        Write-Header -ShowStartupMessage
         Write-StartupScreen
 
         # infinite main loop
@@ -677,7 +686,6 @@ function Start-TextTemplateTool {
                 $selection = 1
 
                 Write-Header
-                Read-Config
                 $templates = Import-Templates -ForceReload
 
                 Write-Header

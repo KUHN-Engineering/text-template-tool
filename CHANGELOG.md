@@ -23,6 +23,7 @@
   - set verbose mode
   - override default config parameters through config file
   - added sample config file with explanations
+- feat: configurable start up message
 
 ## [0.4.0] - 2025-10-29
 - Added command `m` to list most recently modified templates
