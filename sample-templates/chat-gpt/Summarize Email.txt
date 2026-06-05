@@ -1,5 +1,7 @@
 KEYWORDS: chatgpt, ai, prompt, summarize, email, productivity, inbox
-Please summarize the following email thread concisely:
+Dear ChatGPT,
+
+please summarize the following email thread concisely:
 
 - Key topic or request
 - Who needs to act and what exactly
