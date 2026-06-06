@@ -359,13 +359,14 @@ function Search-Template {
         $results = foreach ($template in $templates) {
 
             $score = 0
+            $dimScores = @{ T = 0; K = 0; P = 0; C = 0 }
             foreach ($fragment in $queryFragments) {
 
                 foreach ($dimension in @(
-                        @{ Words = $template.Search.TitleWords; Weight = $script:Config.SearchDimensionWeightTitle },
-                        @{ Words = $template.Search.KeywordWords; Weight = $script:Config.SearchDimensionWeightKeywords },
-                        @{ Words = $template.Search.PathWords; Weight = $script:Config.SearchDimensionWeightPath },
-                        @{ Words = $template.Search.ContentWords; Weight = $script:Config.SearchDimensionWeightContent }
+                        @{ Name = "T"; Words = $template.Search.TitleWords;   Weight = $script:Config.SearchDimensionWeightTitle },
+                        @{ Name = "K"; Words = $template.Search.KeywordWords; Weight = $script:Config.SearchDimensionWeightKeywords },
+                        @{ Name = "P"; Words = $template.Search.PathWords;    Weight = $script:Config.SearchDimensionWeightPath },
+                        @{ Name = "C"; Words = $template.Search.ContentWords; Weight = $script:Config.SearchDimensionWeightContent }
                     )) {
                     $dimensionScore = 0
                     foreach ($word in $dimension.Words) {
@@ -379,14 +380,17 @@ function Search-Template {
                             $dimensionScore += $script:Config.SearchMatchWeightSubstring
                         }
                     }
-                    $score += $dimensionScore * $dimension.Weight
+                    $dimTotal = $dimensionScore * $dimension.Weight
+                    $score += $dimTotal
+                    $dimScores[$dimension.Name] += $dimTotal
                 }
             }
 
             if ($score -gt 0) {
                 [PSCustomObject]@{
-                    Template = $template
-                    Score    = $score
+                    Template  = $template
+                    Score     = $score
+                    DimScores = $dimScores
                 }
             }
         }
@@ -472,15 +476,22 @@ function Write-Results {
             }
             else {
                 # "search"
-                $printStr = " $cntStr | $($template.Title) [$($result.Score)]"
+                $printStr = " $cntStr | $($template.Title)"
             }
 
             # write + color
             if ($cnt -eq $Selection) {
-                Write-Host $printStr -ForegroundColor $script:Config.ColorHighlight
+                Write-Host $printStr -NoNewline -ForegroundColor $script:Config.ColorHighlight
             }
             else {
-                Write-Host $printStr
+                Write-Host $printStr -NoNewline
+            }
+
+            if ($Style -ne "modified" -and $script:Config.VerboseMode) {
+                Write-Host "  [$($result.Score)]  T:$($result.DimScores.T) K:$($result.DimScores.K) P:$($result.DimScores.P) C:$($result.DimScores.C)" -ForegroundColor $script:Config.ColorWarning
+            }
+            else {
+                Write-Host ""
             }
         }
     }
