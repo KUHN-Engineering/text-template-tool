@@ -616,11 +616,8 @@ function Import-TemplatesFromJSON {
         }
         catch {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
-            Write-Host "Template cache is corrupt and has been removed. Restart to rebuild it." -ForegroundColor $script:Config.ColorError
-            Write-Host ""
-            Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorError
-            Read-Host
-            exit
+            Write-Host "Template cache is corrupt and has been removed." -ForegroundColor $script:Config.ColorWarning
+            return $null
         }
         return $templates
     }
@@ -670,6 +667,17 @@ function Import-Templates {
         # load templates from cache
         Write-Host "- Importing templates..."
         $templates = Import-TemplatesFromJSON -JSONFile $script:Config.TemplateCacheFile
+
+        # if cache was corrupt, rebuild and reimport
+        if ($null -eq $templates) {
+            Write-Host "- Reloading templates from folder..."
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            Convert-TemplatesToJSON -Folder $script:Config.TemplateFolder -JSONFile $script:Config.TemplateCacheFile
+            $sw.Stop()
+            $script:Stats.RebuildCacheMs = $sw.ElapsedMilliseconds
+            Write-Host "- Importing templates..."
+            $templates = Import-TemplatesFromJSON -JSONFile $script:Config.TemplateCacheFile
+        }
 
         # preprocess search words in memory
         Write-Host "- Preprocessing search index..."
