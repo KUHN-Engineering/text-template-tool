@@ -600,7 +600,7 @@ function Get-TemplateFromFile {
         $title = [System.IO.Path]::GetFileNameWithoutExtension($FilePath)
 
         # get path
-        $relativePath = $FilePath | Split-Path -Parent | ForEach-Object { $_ -replace [regex]::Escape($BaseFolder), "" } | ForEach-Object { $_ -replace "^\\", "" }
+        $relativePath = $FilePath | Split-Path -Parent | ForEach-Object { $_ -replace [regex]::Escape($BaseFolder), "" } | ForEach-Object { $_ -replace "^[/\\]", "" }
 
         # get lastWriteTime
         $lastWriteTime = (Get-ChildItem -Path $FilePath).LastWriteTime.ToString("yyyy-MM-dd HH:mm")
@@ -813,7 +813,8 @@ function Start-TextTemplateTool {
         Write-Host "- Loading configuration..."
         Read-Config
 
-        if ($IsWindows -ne $false) {
+        $IsWin = ($null -ne $env:OS -and $env:OS -eq "Windows_NT")
+        if ($IsWin) {
             Write-Host "- Checking for desktop shortcut..."
             Add-DesktopShortcut
         }
