@@ -496,12 +496,16 @@ function Get-TemplatesFromFolder {
 
         # process files
         $cnt = 0
+        $lastReportedPct = -1
         $templates = ForEach ($file in $files) {
             $cnt += 1
-            $percentComplete = [math]::Round(($cnt / $files.Count) * 100, 2)
-            Write-Progress -Activity "Processing templates" `
-                -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
-                -PercentComplete $percentComplete
+            $percentComplete = [math]::Floor(($cnt / $files.Count) * 100)
+            if ($percentComplete -ge $lastReportedPct + 5 -or $cnt -eq $files.Count) {
+                $lastReportedPct = $percentComplete
+                Write-Progress -Activity "Processing templates" `
+                    -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
+                    -PercentComplete $percentComplete
+            }
 
             Get-TemplateFromFile -FilePath $file -BaseFolder $folder
         }
