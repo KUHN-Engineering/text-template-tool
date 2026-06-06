@@ -803,7 +803,8 @@ function Start-TextTemplateTool {
             $justSearched = $false
             Write-Host ""
             Write-Host "--------------------------------------------------------------------------------"
-            $query = Read-Host "> Search / Select / Command"
+            $prompt = if ($topResults) { "> Search / Select / Command" } else { "> Search / Command" }
+            $query = Read-Host $prompt
             Write-Header
 
             # empty input -> cycle
