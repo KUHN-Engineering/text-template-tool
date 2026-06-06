@@ -35,6 +35,15 @@ $script:Config = @{
     TemplateCacheFilename         = "template-cache.json"
 
     # default values can be overridden in config file
+    StartupMessage                = ""
+    ColorText                     = "Gray"
+    ColorBackground               = "Black"
+    ColorHighlight                = "Cyan"
+    ColorWarning                  = "Yellow"
+    ColorError                    = "Red"
+    VerboseMode                   = $false
+    ReloadCacheOnStartup          = $false
+    CheckForPowerShell7           = $false
     SearchDimensionWeightTitle    = 10
     SearchDimensionWeightPath     = 8
     SearchDimensionWeightKeywords = 6
@@ -43,23 +52,10 @@ $script:Config = @{
     SearchMatchWeightPrefix       = 50
     SearchMatchWeightSubstring    = 10
     NumberOfResults               = 10
-    ColorText                     = "Gray"
-    ColorBackground               = "Black"
-    ColorHighlight                = "Cyan"
-    ColorWarning                  = "Yellow"
-    ColorError                    = "Red"
-    VerboseMode                   = $false
-    ReloadCacheOnStartup          = $false
-    StartupMessage                = ""
 
     # will be set during runtime in Read-Config
     TemplateFolder                = ""
     TemplateCacheFile             = ""
-
-    CheckForPowerShell7           = $false
-
-    # TEMP fpor testing different clipboard methods, can be set in config file
-    TempSelectClipboardFunction   = 2
 }
 
 $script:Stats = @{
@@ -71,76 +67,6 @@ $script:Stats = @{
 }
 
 ### < SUB FUNCTIONS >
-function Set-ClipboardSafe {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Text,
-
-        [int]$TimeoutMs = 2000,
-        [int]$MaxRetries = 2
-    )
-
-    # TEMP for testing different clipboard methods, can be set in config file
-    switch ($script:Config.TempSelectClipboardFunction) {
-
-        1 {
-            # simple Set-Clipboard cmdlet
-            Set-Clipboard -Value $Text
-        }
-
-        2 {
-            # clip.exe via stdin
-            $Text | clip
-        }
-
-        default {
-            # STA runspace with Windows.Forms (version 2)
-            $attempt = 0
-            while ($attempt -le $MaxRetries) {
-                $runspace = $null
-                $powershell = $null
-
-                try {
-                    $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
-                    $runspace.ApartmentState = [System.Threading.ApartmentState]::STA
-                    $runspace.Open()
-
-                    $powershell = [PowerShell]::Create()
-                    $powershell.Runspace = $runspace
-
-                    $null = $powershell.AddScript({
-                            param($text)
-                            Add-Type -AssemblyName System.Windows.Forms
-                            [System.Windows.Forms.Clipboard]::SetText($text)
-                        }).AddArgument($Text)
-
-                    $async = $powershell.BeginInvoke()
-
-                    if ($async.AsyncWaitHandle.WaitOne($TimeoutMs)) {
-                        $null = $powershell.EndInvoke($async)
-                        return
-                    }
-                    else {
-                        $powershell.Stop()
-                        $attempt++
-                        if ($attempt -le $MaxRetries) { Start-Sleep -Milliseconds 300 }
-                    }
-                }
-                catch {
-                    Write-Warning "Clipboard operation failed (attempt $attempt): $($_.Exception.Message)"
-                    $attempt++
-                    if ($attempt -le $MaxRetries) { Start-Sleep -Milliseconds 300 }
-                }
-                finally {
-                    if ($powershell) { $powershell.Dispose() }
-                    if ($runspace) { $runspace.Close(); $runspace.Dispose() }
-                }
-            }
-
-            Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor $script:Config.ColorWarning
-        }
-    }
-}
 function Get-UIWidth {
     [Math]::Max(80, $Host.UI.RawUI.WindowSize.Width)
 }
@@ -150,11 +76,11 @@ function Write-Header {
         [switch]$ShowStartupMessage
     )
     process {
-        $width    = Get-UIWidth
-        $border   = "#" * $width
-        $left     = "# TTT - Text Template Tool by KUHN Engineering"
-        $right    = "(V$($script:AppVersion))"
-        $pad      = [Math]::Max(1, $width - $left.Length - $right.Length)
+        $width = Get-UIWidth
+        $border = "#" * $width
+        $left = "# TTT - Text Template Tool by KUHN Engineering"
+        $right = "(V$($script:AppVersion))"
+        $pad = [Math]::Max(1, $width - $left.Length - $right.Length)
         $titleLine = $left + (" " * $pad) + $right
         Clear-Host
         Write-Host $border
@@ -172,7 +98,7 @@ function Write-Header {
 function Write-StartupScreen {
     process {
         $c = [Math]::Floor((Get-UIWidth - 19) / 2)
-        $l = $c - [int]19/2
+        $l = $c - [int]19 / 2
         Write-Host ""
         Write-Host (" " * $l + " __________________")
         Write-Host (" " * $l + "/_  __/_  __/_  __/")
@@ -329,9 +255,6 @@ function Read-Config {
 
         if ($config.ContainsKey('CheckForPowerShell7') -and [bool]::TryParse($config['CheckForPowerShell7'], [ref]$boolValue)) { $script:Config.CheckForPowerShell7 = $boolValue }
 
-        # TEMP for testing different clipboard methods, can be set in config file
-        if ($config.ContainsKey('TempSelectClipboardFunction') -and [int]::TryParse($config['TempSelectClipboardFunction'], [ref]$intValue) -and $intValue -ge 1 -and $intValue -le 3) { $script:Config.TempSelectClipboardFunction = $intValue }
-
         # validate template folder
         $templateFolder = $config[$keyName]
         if (!(Test-Path -Path $templateFolder -PathType Container)) {
@@ -375,9 +298,9 @@ function Search-Template {
             foreach ($fragment in $queryFragments) {
 
                 foreach ($dimension in @(
-                        @{ Name = "T"; Words = $template.Search.TitleWords;   Weight = $script:Config.SearchDimensionWeightTitle },
+                        @{ Name = "T"; Words = $template.Search.TitleWords; Weight = $script:Config.SearchDimensionWeightTitle },
                         @{ Name = "K"; Words = $template.Search.KeywordWords; Weight = $script:Config.SearchDimensionWeightKeywords },
-                        @{ Name = "P"; Words = $template.Search.PathWords;    Weight = $script:Config.SearchDimensionWeightPath },
+                        @{ Name = "P"; Words = $template.Search.PathWords; Weight = $script:Config.SearchDimensionWeightPath },
                         @{ Name = "C"; Words = $template.Search.ContentWords; Weight = $script:Config.SearchDimensionWeightContent }
                     )) {
                     $dimensionScore = 0
@@ -427,10 +350,10 @@ function Write-ContentWithHighlights {
         }
 
         # union of raw terms (preserves diacritics/casing) and preprocessed fragments (diacritics stripped)
-        $rawTerms          = @($Query -split '\s+' | Where-Object { $_ -ne '' })
+        $rawTerms = @($Query -split '\s+' | Where-Object { $_ -ne '' })
         $preprocessedTerms = @(ConvertTo-SearchWords -Text $Query)
-        $terms             = @($rawTerms + $preprocessedTerms | Select-Object -Unique)
-        $pattern           = ($terms | ForEach-Object { [regex]::Escape($_) }) -join '|'
+        $terms = @($rawTerms + $preprocessedTerms | Select-Object -Unique)
+        $pattern = ($terms | ForEach-Object { [regex]::Escape($_) }) -join '|'
         $matchList = [regex]::Matches($Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
         if ($matchList.Count -eq 0) {
@@ -480,31 +403,31 @@ function Write-Results {
 
             # enumeration
             $cnt += 1
-            $cntStr  = $cnt.ToString().PadLeft(3, ' ')
-            $width   = Get-UIWidth
-            $prefix  = " $cntStr | "
+            $cntStr = $cnt.ToString().PadLeft(3, ' ')
+            $width = Get-UIWidth
+            $prefix = " $cntStr | "
 
             # string + truncation
             if ($Style -eq "modified") {
-                $fixed       = $template.LastWriteTime + " "
-                $maxTitle    = $width - $prefix.Length - $fixed.Length
-                $title       = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
-                $printStr    = $prefix + $fixed + $title
+                $fixed = $template.LastWriteTime + " "
+                $maxTitle = $width - $prefix.Length - $fixed.Length
+                $title = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                $printStr = $prefix + $fixed + $title
                 $verboseSuffix = ""
             }
             else {
                 if ($script:Config.VerboseMode) {
                     $verboseSuffix = "  [$($result.Score)]  T:$($result.DimScores.T) K:$($result.DimScores.K) P:$($result.DimScores.P) C:$($result.DimScores.C)"
-                    $maxTitle  = $width - $prefix.Length - $verboseSuffix.Length
-                    $title     = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
-                    $pad       = [Math]::Max(0, $width - $prefix.Length - $title.Length - $verboseSuffix.Length)
-                    $printStr  = $prefix + $title + (" " * $pad)
+                    $maxTitle = $width - $prefix.Length - $verboseSuffix.Length
+                    $title = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                    $pad = [Math]::Max(0, $width - $prefix.Length - $title.Length - $verboseSuffix.Length)
+                    $printStr = $prefix + $title + (" " * $pad)
                 }
                 else {
                     $verboseSuffix = ""
-                    $maxTitle  = $width - $prefix.Length
-                    $title     = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
-                    $printStr  = $prefix + $title
+                    $maxTitle = $width - $prefix.Length
+                    $title = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                    $printStr = $prefix + $title
                 }
             }
 
@@ -712,10 +635,10 @@ function Import-Templates {
     process {
 
         $script:Stats.RebuildCacheMs = 0
-        $script:Stats.PreprocessMs   = 0
-        $script:Stats.LastSearchMs   = 0
-        $script:Stats.AvgSearchMs    = 0
-        $script:Stats.SearchCount    = 0
+        $script:Stats.PreprocessMs = 0
+        $script:Stats.LastSearchMs = 0
+        $script:Stats.AvgSearchMs = 0
+        $script:Stats.SearchCount = 0
 
         # check template cache
         Write-Host "- Checking templates..."
@@ -791,7 +714,6 @@ function Write-Info {
             Write-Host "Search dimension weights:   title=$($script:Config.SearchDimensionWeightTitle)  path=$($script:Config.SearchDimensionWeightPath)  keywords=$($script:Config.SearchDimensionWeightKeywords)  content=$($script:Config.SearchDimensionWeightContent)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Search match weights:       exact=$($script:Config.SearchMatchWeightExact)  prefix=$($script:Config.SearchMatchWeightPrefix)  substring=$($script:Config.SearchMatchWeightSubstring)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Colors:                     selection=$($script:Config.ColorHighlight)  warning=$($script:Config.ColorWarning)  error=$($script:Config.ColorError)  text=$($script:Config.ColorText)  background=$($script:Config.ColorBackground)" -ForegroundColor $script:Config.ColorWarning
-            Write-Host "Clipboard function (TEMP):  $($script:Config.TempSelectClipboardFunction)" -ForegroundColor $script:Config.ColorWarning
             Write-Host ""
             Write-Host "Rebuild cache (ms):         $($script:Stats.RebuildCacheMs)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Preprocess templates (ms):  $($script:Stats.PreprocessMs)" -ForegroundColor $script:Config.ColorWarning
@@ -991,7 +913,7 @@ function Start-TextTemplateTool {
                 $template = $topResults[$selection - 1].Template
                 
                 if (-not [string]::IsNullOrWhiteSpace($template.Content)) {
-                    Set-ClipboardSafe $template.Content
+                    Set-Clipboard -Value $template.Content
                     Write-ContentWithHighlights -Content $template.Content -Query $currentQuery
                 }
                 else {
