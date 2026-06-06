@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
     .SYNOPSIS
-    Text Template Tool (TTT) by KUHN Engineering
+    TTT- Text Template Tool by KUHN Engineering
 
     .DESCRIPTION
     Compact and efficient PowerShell utility that quickly searches through text templates and copies them directly to the clipboard for immediate use.
@@ -273,7 +273,9 @@ function Read-Config {
             catch {
                 Write-Host "Unable to write configuration file: $($_.Exception.Message)" -ForegroundColor $script:Config.ColorError
                 Write-Host "Please add the configuration file manually and restart." -ForegroundColor $script:Config.ColorError
-                Read-Host
+                Write-Host ""
+                Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorError
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
                 exit
             }
         }
@@ -319,7 +321,7 @@ function Read-Config {
             Write-Host "Update '$($script:Config.ConfigFilename)' or delete it to reconfigure." -ForegroundColor $script:Config.ColorError
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorError
-            Read-Host
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
             exit
         }
 
@@ -600,10 +602,11 @@ function Convert-TemplatesToJSON {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
             Write-Host ""
             Write-Host "Your template folder doesn't contain any template text files (*.txt)." -ForegroundColor $script:Config.ColorWarning
-            Write-Host "Add your first template to $($Folder) and restart $($script:AppName)." -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Add your first template to the following folder and restart." -ForegroundColor $script:Config.ColorWarning
+            Write-Host "$($Folder)" -ForegroundColor $script:Config.ColorHighlight
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorWarning
-            Read-Host
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
             exit
         }
 
