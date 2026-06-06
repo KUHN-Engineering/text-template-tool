@@ -141,15 +141,25 @@ function Set-ClipboardSafe {
         }
     }
 }
+function Get-UIWidth {
+    [Math]::Max(80, $Host.UI.RawUI.WindowSize.Width)
+}
+
 function Write-Header {
     param(
         [switch]$ShowStartupMessage
     )
     process {
+        $width    = Get-UIWidth
+        $border   = "#" * $width
+        $left     = "# TTT - Text Template Tool by KUHN Engineering"
+        $right    = "(V$($script:AppVersion))"
+        $pad      = [Math]::Max(1, $width - $left.Length - $right.Length)
+        $titleLine = $left + (" " * $pad) + $right
         Clear-Host
-        Write-Host "################################################################################"
-        Write-Host "# TTT - Text Template Tool by KUHN Engineering                          (V$($script:AppVersion))"
-        Write-Host "################################################################################"
+        Write-Host $border
+        Write-Host $titleLine
+        Write-Host $border
         if ($ShowStartupMessage -and -not [string]::IsNullOrWhiteSpace($script:Config.StartupMessage)) {
             Write-Host $script:Config.StartupMessage -ForegroundColor $script:Config.ColorHighlight
         }
@@ -161,11 +171,13 @@ function Write-Header {
 
 function Write-StartupScreen {
     process {
+        $c = [Math]::Floor((Get-UIWidth - 19) / 2)
+        $l = $c - [int]19/2
         Write-Host ""
-        Write-Host "                             __________________"
-        Write-Host "                            /_  __/_  __/_  __/"
-        Write-Host "                             / /   / /   / /"
-        Write-Host "                            /_/   /_/   /_/"
+        Write-Host (" " * $l + " __________________")
+        Write-Host (" " * $l + "/_  __/_  __/_  __/")
+        Write-Host (" " * $l + " / /   / /   / /")
+        Write-Host (" " * $l + "/_/   /_/   /_/")
         Write-Host ""
         Write-Host ""
         Write-Host ""
@@ -468,15 +480,32 @@ function Write-Results {
 
             # enumeration
             $cnt += 1
-            $cntStr = $cnt.ToString().PadLeft(3, ' ')
-            
-            # string
+            $cntStr  = $cnt.ToString().PadLeft(3, ' ')
+            $width   = Get-UIWidth
+            $prefix  = " $cntStr | "
+
+            # string + truncation
             if ($Style -eq "modified") {
-                $printStr = " $cntStr | $($template.LastWriteTime) $($template.Title)"
+                $fixed       = $template.LastWriteTime + " "
+                $maxTitle    = $width - $prefix.Length - $fixed.Length
+                $title       = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                $printStr    = $prefix + $fixed + $title
+                $verboseSuffix = ""
             }
             else {
-                # "search"
-                $printStr = " $cntStr | $($template.Title)"
+                if ($script:Config.VerboseMode) {
+                    $verboseSuffix = "  [$($result.Score)]  T:$($result.DimScores.T) K:$($result.DimScores.K) P:$($result.DimScores.P) C:$($result.DimScores.C)"
+                    $maxTitle  = $width - $prefix.Length - $verboseSuffix.Length
+                    $title     = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                    $pad       = [Math]::Max(0, $width - $prefix.Length - $title.Length - $verboseSuffix.Length)
+                    $printStr  = $prefix + $title + (" " * $pad)
+                }
+                else {
+                    $verboseSuffix = ""
+                    $maxTitle  = $width - $prefix.Length
+                    $title     = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                    $printStr  = $prefix + $title
+                }
             }
 
             # write + color
@@ -487,8 +516,8 @@ function Write-Results {
                 Write-Host $printStr -NoNewline
             }
 
-            if ($Style -ne "modified" -and $script:Config.VerboseMode) {
-                Write-Host "  [$($result.Score)]  T:$($result.DimScores.T) K:$($result.DimScores.K) P:$($result.DimScores.P) C:$($result.DimScores.C)" -ForegroundColor $script:Config.ColorWarning
+            if ($verboseSuffix) {
+                Write-Host $verboseSuffix -ForegroundColor $script:Config.ColorWarning
             }
             else {
                 Write-Host ""
@@ -802,7 +831,7 @@ function Start-TextTemplateTool {
         do {
             $justSearched = $false
             Write-Host ""
-            Write-Host "--------------------------------------------------------------------------------"
+            Write-Host ("-" * (Get-UIWidth))
             $prompt = if ($topResults) { "> Search / Select / Command" } else { "> Search / Command" }
             $query = Read-Host $prompt
             Write-Header
@@ -970,7 +999,7 @@ function Start-TextTemplateTool {
                 if ($justSearched -and $script:Config.VerboseMode) {
                     Write-Host "Search (ms): last=$($script:Stats.LastSearchMs)  avg=$($script:Stats.AvgSearchMs)  n=$($script:Stats.SearchCount)" -ForegroundColor $script:Config.ColorWarning
                 }
-                Write-Host "--------------------------------------------------------------------------------"
+                Write-Host ("-" * (Get-UIWidth))
                 Write-Host ""
                 Write-Results -Results $topResults -Selection $selection -Style $style
             }
