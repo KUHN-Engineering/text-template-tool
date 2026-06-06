@@ -63,6 +63,9 @@ $script:Config = @{
 $script:Stats = @{
     RebuildCacheMs = 0
     PreprocessMs   = 0
+    LastSearchMs   = 0
+    AvgSearchMs    = 0
+    SearchCount    = 0
 }
 
 ### < SUB FUNCTIONS >
@@ -666,7 +669,10 @@ function Import-Templates {
     process {
 
         $script:Stats.RebuildCacheMs = 0
-        $script:Stats.PreprocessMs = 0
+        $script:Stats.PreprocessMs   = 0
+        $script:Stats.LastSearchMs   = 0
+        $script:Stats.AvgSearchMs    = 0
+        $script:Stats.SearchCount    = 0
 
         # check template cache
         Write-Host "- Checking templates..."
@@ -779,6 +785,7 @@ function Start-TextTemplateTool {
         $style = "search"
         $currentQuery = ""
         do {
+            $justSearched = $false
             Write-Host ""
             Write-Host "--------------------------------------------------------------------------------"
             $query = Read-Host "> Search / Select / Command"
@@ -911,7 +918,14 @@ function Start-TextTemplateTool {
             # search query
             else {
                 $currentQuery = $query
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
                 $topResults = Search-Template -Templates $templates -Query $query
+                $sw.Stop()
+                $script:Stats.LastSearchMs = $sw.ElapsedMilliseconds
+                $script:Stats.SearchCount++
+                $script:Stats.AvgSearchMs = [math]::Round(
+                    $script:Stats.AvgSearchMs + ($script:Stats.LastSearchMs - $script:Stats.AvgSearchMs) / $script:Stats.SearchCount, 1)
+                $justSearched = $true
                 $selection = 1
                 $style = "search"
 
@@ -934,6 +948,9 @@ function Start-TextTemplateTool {
                 }
 
                 Write-Host ""
+                if ($justSearched -and $script:Config.VerboseMode) {
+                    Write-Host "Search (ms): last=$($script:Stats.LastSearchMs)  avg=$($script:Stats.AvgSearchMs)  n=$($script:Stats.SearchCount)" -ForegroundColor $script:Config.ColorWarning
+                }
                 Write-Host "--------------------------------------------------------------------------------"
                 Write-Host ""
                 Write-Results -Results $topResults -Selection $selection -Style $style
