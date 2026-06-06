@@ -56,6 +56,8 @@ $script:Config = @{
     TemplateFolder                = ""
     TemplateCacheFile             = ""
 
+    CheckForPowerShell7           = $false
+
     # TEMP fpor testing different clipboard methods, can be set in config file
     TempSelectClipboardFunction   = 2
 }
@@ -178,18 +180,17 @@ function Add-DesktopShortcut {
 
             Write-Host "- Adding desktop shortcut..."
 
-            # auto-detect PowerShell 7
-            $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+            $TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            $IconLocation = "powershell.exe,0"
+            $Version = "Windows PowerShell"
 
-            if ($pwsh) {
-                $TargetPath = $pwsh.Source
-                $IconLocation = "$TargetPath,0"
-                $Version = "PowerShell 7+"
-            }
-            else {
-                $TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-                $IconLocation = "powershell.exe,0"
-                $Version = "Windows PowerShell"
+            if ($script:Config.CheckForPowerShell7) {
+                $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+                if ($pwsh) {
+                    $TargetPath = $pwsh.Source
+                    $IconLocation = "$TargetPath,0"
+                    $Version = "PowerShell 7+"
+                }
             }
             
             $scriptPath = $PSCommandPath
@@ -313,6 +314,8 @@ function Read-Config {
         if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
         if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
         if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
+
+        if ($config.ContainsKey('CheckForPowerShell7') -and [bool]::TryParse($config['CheckForPowerShell7'], [ref]$boolValue)) { $script:Config.CheckForPowerShell7 = $boolValue }
 
         # TEMP for testing different clipboard methods, can be set in config file
         if ($config.ContainsKey('TempSelectClipboardFunction') -and [int]::TryParse($config['TempSelectClipboardFunction'], [ref]$intValue) -and $intValue -ge 1 -and $intValue -le 3) { $script:Config.TempSelectClipboardFunction = $intValue }
@@ -742,6 +745,7 @@ function Write-Info {
             Write-Host "Config file:                $(Join-Path (Split-Path -Parent $PSCommandPath) $script:Config.ConfigFilename)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Cache file:                 $($script:Config.TemplateCacheFile)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Check for PowerShell 7:     $($script:Config.CheckForPowerShell7)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Startup message:            $($script:Config.StartupMessage)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Search dimension weights:   title=$($script:Config.SearchDimensionWeightTitle)  path=$($script:Config.SearchDimensionWeightPath)  keywords=$($script:Config.SearchDimensionWeightKeywords)  content=$($script:Config.SearchDimensionWeightContent)" -ForegroundColor $script:Config.ColorWarning
@@ -766,11 +770,11 @@ function Start-TextTemplateTool {
         Write-Header
 
         # add desktop shortcut
-        Write-Host "- Checking for desktop shortcut..."
-        Add-DesktopShortcut
-
         Write-Host "- Loading configuration..."
         Read-Config
+
+        Write-Host "- Checking for desktop shortcut..."
+        Add-DesktopShortcut
 
         # load templates
         $templates = Import-Templates -ForceReload:$script:Config.ReloadCacheOnStartup
