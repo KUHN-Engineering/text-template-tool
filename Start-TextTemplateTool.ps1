@@ -813,8 +813,10 @@ function Start-TextTemplateTool {
         Write-Host "- Loading configuration..."
         Read-Config
 
-        Write-Host "- Checking for desktop shortcut..."
-        Add-DesktopShortcut
+        if ($IsWindows -ne $false) {
+            Write-Host "- Checking for desktop shortcut..."
+            Add-DesktopShortcut
+        }
 
         # load templates
         $templates = Import-Templates -ForceReload:$script:Config.ReloadCacheOnStartup
