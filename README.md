@@ -14,11 +14,11 @@ A tiny keyboard-driven productivity tool that lets you search, select, and copy 
 Many everyday tasks at work involve typing the same things over and over: email replies, status updates, standard phrases, form responses. This tool keeps all your text snippets in one place and puts any of them on your clipboard with just a few keystrokes.
 
 **What can you use it for?**
-- Ready-to-paste email replies, greetings, and standard phrases
-- Lookup tables you reach for often — phone numbers, codes, account names
-- Notes or checklists you refer to regularly
-- Your best LLM prompts, organised and always one keystroke away
 - Any text you find yourself typing repeatedly at work
+- Lookup tables you reach for often — phone numbers, codes, account names
+- Your best LLM prompts, organised and always one keystroke away
+- Notes or checklists you refer to regularly
+- Ready-to-paste email replies, greetings, and standard phrases
 
 **Why a PowerShell Text-Based User Interface (TUI) Solution?**
 
@@ -57,7 +57,7 @@ Create a folder where your template files will live (e.g. `C:\Users\YourName\tex
 
 > **Tip:** A few starter templates are included in the `sample-templates` folder. Copy them to your template folder to get started quickly and see how templates and keywords are structured.
 
-> **Tip:** Keep the script and your template folder in the same location — this simplifies upgrades and avoids cache compatibility issues. A shared team folder works well for shared access; a personal documents folder (typically available across all workstations) works for personal use.
+> **Tip:** Place the script and your template folder together in the same location. For personal use, your personal documents folder is a good choice — on corporate workstations it is typically available across all machines, so your tool and templates follow you wherever you log in. For team use, place both on a shared network drive to give everyone access to the same script and templates.
 
 #### 4. Run the script for the first time
 Right-click `Start-TextTemplateTool.ps1` and select **Run with PowerShell**. On first run, you will be prompted to enter the path to your template folder. A desktop shortcut is then created automatically.
@@ -130,7 +130,7 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 This only affects your own user account and does not require admin rights. See the [official Microsoft documentation](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies) for full details on execution policies.
 
-> **Note:** In a corporate environment, check with your IT department and your organisation's code of conduct before changing this setting.
+> **Note:** In a corporate environment, check with your IT department and your organisation's code of conduct before running scripts or changing this setting.
 
 ### Template Cache and Reload
 
