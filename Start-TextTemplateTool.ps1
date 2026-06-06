@@ -43,6 +43,8 @@ $script:Config = @{
     SearchMatchWeightPrefix       = 50
     SearchMatchWeightSubstring    = 10
     NumberOfResults               = 10
+    ColorText                     = "Gray"
+    ColorBackground               = "Black"
     ColorHighlight                = "Cyan"
     ColorWarning                  = "Yellow"
     ColorError                    = "Red"
@@ -296,15 +298,19 @@ function Read-Config {
         if ($config.ContainsKey('SearchMatchWeightExact') -and [int]::TryParse($config['SearchMatchWeightExact'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightExact = $intValue }
         if ($config.ContainsKey('SearchMatchWeightPrefix') -and [int]::TryParse($config['SearchMatchWeightPrefix'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightPrefix = $intValue }
         if ($config.ContainsKey('SearchMatchWeightSubstring') -and [int]::TryParse($config['SearchMatchWeightSubstring'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightSubstring = $intValue }
+        
+        if ($config.ContainsKey('ColorText')) { try { $script:Config.ColorText = [string][System.ConsoleColor]$config['ColorText'] } catch {} }
+        if ($config.ContainsKey('ColorBackground')) { try { $script:Config.ColorBackground = [string][System.ConsoleColor]$config['ColorBackground'] } catch {} }
         if ($config.ContainsKey('ColorHighlight')) { try { $script:Config.ColorHighlight = [string][System.ConsoleColor]$config['ColorHighlight'] } catch {} }
         if ($config.ContainsKey('ColorWarning')) { try { $script:Config.ColorWarning = [string][System.ConsoleColor]$config['ColorWarning'] } catch {} }
         if ($config.ContainsKey('ColorError')) { try { $script:Config.ColorError = [string][System.ConsoleColor]$config['ColorError'] } catch {} }
+        
         if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
         if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
         if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
 
         # TEMP for testing different clipboard methods, can be set in config file
-         if ($config.ContainsKey('TempSelectClipboardFunction') -and [int]::TryParse($config['TempSelectClipboardFunction'], [ref]$intValue) -and $intValue -ge 1 -and $intValue -le 3) { $script:Config.TempSelectClipboardFunction = $intValue }
+        if ($config.ContainsKey('TempSelectClipboardFunction') -and [int]::TryParse($config['TempSelectClipboardFunction'], [ref]$intValue) -and $intValue -ge 1 -and $intValue -le 3) { $script:Config.TempSelectClipboardFunction = $intValue }
 
         # validate template folder
         $templateFolder = $config[$keyName]
@@ -322,6 +328,9 @@ function Read-Config {
 
         # set verbose mode if enabled in config
         $global:VerbosePreference = if ($script:Config.VerboseMode) { 'Continue' } else { 'SilentlyContinue' }
+
+        $Host.UI.RawUI.ForegroundColor = $script:Config.ColorText
+        $Host.UI.RawUI.BackgroundColor = $script:Config.ColorBackground
     }
 }
 
@@ -719,10 +728,12 @@ function Write-Info {
             Write-Host "Config file:                $(Join-Path (Split-Path -Parent $PSCommandPath) $script:Config.ConfigFilename)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Cache file:                 $($script:Config.TemplateCacheFile)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Startup message:            $($script:Config.StartupMessage)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Search dimension weights:   title=$($script:Config.SearchDimensionWeightTitle)  path=$($script:Config.SearchDimensionWeightPath)  keywords=$($script:Config.SearchDimensionWeightKeywords)  content=$($script:Config.SearchDimensionWeightContent)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Search match weights:       exact=$($script:Config.SearchMatchWeightExact)  prefix=$($script:Config.SearchMatchWeightPrefix)  substring=$($script:Config.SearchMatchWeightSubstring)" -ForegroundColor $script:Config.ColorWarning
-            Write-Host "Colors:                     selection=$($script:Config.ColorHighlight)  warning=$($script:Config.ColorWarning)  error=$($script:Config.ColorError)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Colors:                     selection=$($script:Config.ColorHighlight)  warning=$($script:Config.ColorWarning)  error=$($script:Config.ColorError)  text=$($script:Config.ColorText)  background=$($script:Config.ColorBackground)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Clipboard function (TEMP):  $($script:Config.TempSelectClipboardFunction)" -ForegroundColor $script:Config.ColorWarning
             Write-Host ""
             Write-Host "Rebuild cache (ms):         $($script:Stats.RebuildCacheMs)" -ForegroundColor $script:Config.ColorWarning
             Write-Host "Preprocess templates (ms):  $($script:Stats.PreprocessMs)" -ForegroundColor $script:Config.ColorWarning
