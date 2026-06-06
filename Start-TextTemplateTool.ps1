@@ -8,7 +8,7 @@
 
     .NOTES
     Version:        0.5.0
-    Author:         Christian Kuhn, KUHN Engineering, www.kuhn-engineering.ch
+    Author:         Christian Kuhn - KUHN Engineering | www.kuhn-engineering.ch
     Date:           2026
 
     .EXAMPLE
@@ -826,11 +826,10 @@ function Start-TextTemplateTool {
                 $selection = 1
                 $currentQuery = ""
 
-                Write-Host "Available commands:"
+                Write-Host "   Author:         Christian Kuhn - KUHN Engineering | www.kuhn-engineering.ch"
+                Write-Host "   GitHub:         https://github.com/KUHN-Engineering/text-template-tool"
                 Write-Host ""
-                Write-Host "   h    help       Lists all available commands."
-                Write-Host ""
-                Write-Host "   i    info       Displays template count and folder info."
+                Write-Host "# Commands"
                 Write-Host ""
                 Write-Host "   o    open       Opens the selected template in a text editor."
                 Write-Host ""
@@ -842,8 +841,12 @@ function Start-TextTemplateTool {
                 Write-Host ""
                 Write-Host "   m    modified   Lists the most recently modified templates."
                 Write-Host ""
+                Write-Host "   i    info       Displays template count and folder info."
+                Write-Host ""
+                Write-Host "   h    help       Shows this help."
+                Write-Host ""
                 Write-Host "   q    quit       Exits Text Template Tool."
-                
+
                 continue
             }
             elseif ($query -eq "q") {
