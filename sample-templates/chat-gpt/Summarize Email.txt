@@ -1,0 +1,14 @@
+KEYWORDS: chatgpt, ai, prompt, summarize, email, productivity, inbox
+Dear ChatGPT,
+
+please summarize the following email thread concisely:
+
+- Key topic or request
+- Who needs to act and what exactly
+- Any deadlines or dates mentioned
+- Open questions or blockers
+
+Keep the summary to 5 bullet points or fewer. Use plain, professional language.
+
+---
+[PASTE EMAIL THREAD HERE]

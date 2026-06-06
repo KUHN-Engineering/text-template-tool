@@ -1,15 +1,15 @@
 #Requires -Version 5.1
 <#
     .SYNOPSIS
-    Text Template Tool (TTT) by KUHN Engineering
+    TTT- Text Template Tool by KUHN Engineering
 
     .DESCRIPTION
     Compact and efficient PowerShell utility that quickly searches through text templates and copies them directly to the clipboard for immediate use.
 
     .NOTES
-    Version:        0.4.0
-    Author:         Christian Kuhn, KUHN Engineering, www.kuhn-engineering.ch
-    Date:           2025
+    Version:        0.5.0
+    Author:         Christian Kuhn - KUHN Engineering | www.kuhn-engineering.ch
+    Date:           2026
 
     .EXAMPLE
     PS> .\Start-TextTemplateTool.ps1
@@ -23,109 +23,257 @@
 # - EXECUTION
 
 ### < GENERAL >
-$app_name = "TTT - Text Template Tool"
-$app_version = "0.4.0"
+Set-StrictMode -Version Latest
+
+$script:AppName = "TTT - Text Template Tool"
+$script:AppVersion = "0.5.0"
 
 ### < CONFIGURATION >
-$CONFIG_personal_config_filename = "config-personal.txt"
-$CONFIG_personal_template_filename = "templates-personal.json"
-$CONFIG_number_of_results = 10
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$script:Config = @{
+    ConfigFilename                = "config.txt"
+    TemplateCacheFilename         = "template-cache.json"
+
+    # default values can be overridden in config file
+    StartupMessage                = ""
+    ColorText                     = "Gray"
+    ColorBackground               = "Black"
+    ColorHighlight                = "Cyan"
+    ColorWarning                  = "Yellow"
+    ColorError                    = "Red"
+    VerboseMode                   = $false
+    ReloadCacheOnStartup          = $false
+    CheckForPowerShell7           = $false
+    SearchDimensionWeightTitle    = 10
+    SearchDimensionWeightPath     = 8
+    SearchDimensionWeightKeywords = 6
+    SearchDimensionWeightContent  = 2
+    SearchMatchWeightExact        = 100
+    SearchMatchWeightPrefix       = 50
+    SearchMatchWeightSubstring    = 10
+    NumberOfResults               = 10
+
+    # will be set during runtime in Read-Config
+    TemplateFolder                = ""
+    TemplateCacheFile             = ""
+}
+
+$script:Stats = @{
+    RebuildCacheMs = 0
+    PreprocessMs   = 0
+    LastSearchMs   = 0
+    AvgSearchMs    = 0
+    SearchCount    = 0
+}
 
 ### < SUB FUNCTIONS >
+function Get-UIWidth {
+    [Math]::Max(80, $Host.UI.RawUI.WindowSize.Width)
+}
+
 function Write-Header {
+    param(
+        [switch]$ShowStartupMessage
+    )
     process {
+        $width = Get-UIWidth
+        $border = "#" * $width
+        $left = "# TTT - Text Template Tool by KUHN Engineering"
+        $right = "(V$($script:AppVersion))"
+        $pad = [Math]::Max(1, $width - $left.Length - $right.Length)
+        $titleLine = $left + (" " * $pad) + $right
         Clear-Host
-        Write-Host "################################################################################"
-        Write-Host "# TTT - Text Template Tool by KUHN Engineering                          (V$($app_version))"
-        Write-Host "################################################################################"
-        Write-Host ""
+        Write-Host $border
+        Write-Host $titleLine
+        Write-Host $border
+        if ($ShowStartupMessage -and -not [string]::IsNullOrWhiteSpace($script:Config.StartupMessage)) {
+            Write-Host $script:Config.StartupMessage -ForegroundColor $script:Config.ColorHighlight
+        }
+        else {
+            Write-Host ""
+        }
     }
 }
 
 function Write-StartupScreen {
     process {
+        $c = [Math]::Floor((Get-UIWidth - 19) / 2)
+        $l = $c - [int]19 / 2
         Write-Host ""
-        Write-Host "                             __________________"
-        Write-Host "                            /_  __/_  __/_  __/"
-        Write-Host "                             / /   / /   / /"
-        Write-Host "                            /_/   /_/   /_/"
+        Write-Host (" " * $l + " __________________")
+        Write-Host (" " * $l + "/_  __/_  __/_  __/")
+        Write-Host (" " * $l + " / /   / /   / /")
+        Write-Host (" " * $l + "/_/   /_/   /_/")
         Write-Host ""
         Write-Host ""
         Write-Host ""
-        Write-Host "Enter command 'h' for help."
+        Write-Host "Type to search, 'h' for help, 'r' to reload templates."
     }
 }
 
 function Add-DesktopShortcut {
     process {
-        $shortcut_path = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "$($app_name).lnk")
-        if (!(Test-Path -Path $shortcut_path)) {
+        $shortcutPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "$($script:AppName).lnk")
+        if (!(Test-Path -Path $shortcutPath)) {
 
             Write-Host "- Adding desktop shortcut..."
+
+            $TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            $IconLocation = "powershell.exe,0"
+            $Version = "Windows PowerShell"
+
+            if ($script:Config.CheckForPowerShell7) {
+                $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+                if ($pwsh) {
+                    $TargetPath = $pwsh.Source
+                    $IconLocation = "$TargetPath,0"
+                    $Version = "PowerShell 7+"
+                }
+            }
             
-            $script_path = Resolve-Path -Path $PSCommandPath
-            $ps_path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            $scriptPath = $PSCommandPath
 
             $WShell = New-Object -ComObject WScript.Shell
-            $shortcut = $WShell.CreateShortcut($shortcut_path)
+            $shortcut = $WShell.CreateShortcut($shortcutPath)
 
-            $shortcut.TargetPath = $ps_path
-            $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$script_path`""
-            $shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName($script_path)
-            $shortcut.Description = "Desktop Shortcut for $($app_name)"
-            $shortcut.IconLocation = "$PowerShellPath, 0"
+            $shortcut.TargetPath = $TargetPath
+            $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+            $shortcut.WorkingDirectory = (Split-Path $scriptPath -Parent)
+            $shortcut.Description = "Desktop Shortcut for $($script:AppName) using $($Version)"
+            $shortcut.IconLocation = $IconLocation
 
             $shortcut.Save()
         }
     }
 }
 
-function Set-Config {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        $FilePath
-    )
-    process {
-        Write-Host ""
-        Write-Host "Configuration file '$($CONFIG_personal_config_filename)' not found." -ForegroundColor Yellow
-        Write-Host "Set your desired personal template folder below by drag and drop, copy/paste or typing." -ForegroundColor Yellow
-        Write-Host ""
-        $path = Read-Host "> Personal template folder"
-
-        try {
-            $path = Resolve-Path -Path $path -ErrorAction Stop
-            "personal-template-folder: $($path)" | Out-File -FilePath $FilePath -Encoding UTF8
-        }
-        catch {
-            Write-Host "Unable to set configuration. Invalid path or access denied." -ForegroundColor Red
-            Write-Host "Please restart or add configuration file manually." -ForegroundColor Red
-            Write-Host "Press any key to exit." -ForegroundColor Red
-            Read-Host
-            exit
-        }
-    }
-}
-
 function Read-Config {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Leaf -Include "*.txt" })]
-        $FilePath
-    )
     process {
+        $scriptDir = Split-Path -Parent $PSCommandPath
+        $filePath = Join-Path $scriptDir $script:Config.ConfigFilename
+        $keyName = "TemplateFolder"
+        $fileExists = Test-Path -Path $filePath
+        $needsPrompt = $true
 
-        $config = @{}
-        Get-Content -Path $FilePath | ForEach-Object {
-            $key, $value = $_ -split ":", 2 | ForEach-Object { $_.Trim() }
-            if ($key -and $value) {
-                $config[$key] = $value
+        # check if TemplateFolder key already has a valid value
+        if ($fileExists) {
+            $keyLine = Get-Content -Path $filePath | Where-Object { $_ -match "^\s*$([regex]::Escape($keyName))\s*:" } | Select-Object -First 1
+            if ($keyLine) {
+                $existingValue = ($keyLine -split ":", 2)[1].Trim()
+                if ($existingValue -and (Test-Path -Path $existingValue -PathType Container)) {
+                    $needsPrompt = $false
+                }
+                else {
+                    (Get-Content -Path $filePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $filePath -Encoding UTF8
+                    Write-Host ""
+                    Write-Host "Key '$keyName' has an invalid value in '$($script:Config.ConfigFilename)'." -ForegroundColor $script:Config.ColorWarning
+                }
+            }
+            else {
+                Write-Host ""
+                Write-Host "Key '$keyName' missing in '$($script:Config.ConfigFilename)'." -ForegroundColor $script:Config.ColorWarning
+            }
+        }
+        else {
+            Write-Host ""
+            Write-Host "Configuration file '$($script:Config.ConfigFilename)' not found." -ForegroundColor $script:Config.ColorWarning
+        }
+
+        # prompt for template-folder if needed
+        if ($needsPrompt) {
+            Write-Host "Set your template folder (drag and drop, copy/paste or type the path)." -ForegroundColor $script:Config.ColorWarning
+            Write-Host ""
+
+            $resolved = $null
+            while (-not $resolved) {
+                $path = (Read-Host "> Template folder").Trim().Trim('"', "'")
+                try {
+                    $candidate = Resolve-Path -Path $path -ErrorAction Stop
+                    if (Test-Path -Path $candidate -PathType Container) {
+                        $resolved = $candidate
+                    }
+                    else {
+                        Write-Host "Path exists but is not a folder. Try again." -ForegroundColor $script:Config.ColorError
+                    }
+                }
+                catch {
+                    Write-Host "Path not found or access denied. Try again." -ForegroundColor $script:Config.ColorError
+                }
+            }
+
+            # insert or overwrite key-value pair to config file or create new file if it doesn't exist
+            $line = "$keyName`: $resolved"
+            try {
+                if ($fileExists) {
+                    $existing = Get-Content -Path $filePath -Raw -Encoding UTF8
+                    "$line`n$existing" | Out-File -FilePath $filePath -Encoding UTF8 -NoNewline
+                }
+                else {
+                    $line | Out-File -FilePath $filePath -Encoding UTF8
+                }
+            }
+            catch {
+                Write-Host "Unable to write configuration file: $($_.Exception.Message)" -ForegroundColor $script:Config.ColorError
+                Write-Host "Please add the configuration file manually and restart." -ForegroundColor $script:Config.ColorError
+                Write-Host ""
+                Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorError
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+                exit
             }
         }
 
-        return $config
+        # read all key-value pairs from config file
+        $config = @{}
+        Get-Content -Path $filePath | ForEach-Object {
+            $cfgLine = $_.Trim()
+            if ($cfgLine -eq "" -or $cfgLine.StartsWith("#")) { return }
+            $key, $value = $cfgLine -split ":", 2 | ForEach-Object { $_.Trim() }
+            if ($key -and $value) { $config[$key] = $value }
+        }
+
+        # apply optional config overrides
+        $intValue = 0
+        $boolValue = $false
+        if ($config.ContainsKey('NumberOfResults') -and [int]::TryParse($config['NumberOfResults'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.NumberOfResults = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightTitle') -and [int]::TryParse($config['SearchDimensionWeightTitle'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightTitle = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightPath') -and [int]::TryParse($config['SearchDimensionWeightPath'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightPath = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightKeywords') -and [int]::TryParse($config['SearchDimensionWeightKeywords'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightKeywords = $intValue }
+        if ($config.ContainsKey('SearchDimensionWeightContent') -and [int]::TryParse($config['SearchDimensionWeightContent'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchDimensionWeightContent = $intValue }
+        if ($config.ContainsKey('SearchMatchWeightExact') -and [int]::TryParse($config['SearchMatchWeightExact'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightExact = $intValue }
+        if ($config.ContainsKey('SearchMatchWeightPrefix') -and [int]::TryParse($config['SearchMatchWeightPrefix'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightPrefix = $intValue }
+        if ($config.ContainsKey('SearchMatchWeightSubstring') -and [int]::TryParse($config['SearchMatchWeightSubstring'], [ref]$intValue) -and $intValue -gt 0) { $script:Config.SearchMatchWeightSubstring = $intValue }
+        
+        if ($config.ContainsKey('ColorText')) { try { $script:Config.ColorText = [string][System.ConsoleColor]$config['ColorText'] } catch {} }
+        if ($config.ContainsKey('ColorBackground')) { try { $script:Config.ColorBackground = [string][System.ConsoleColor]$config['ColorBackground'] } catch {} }
+        if ($config.ContainsKey('ColorHighlight')) { try { $script:Config.ColorHighlight = [string][System.ConsoleColor]$config['ColorHighlight'] } catch {} }
+        if ($config.ContainsKey('ColorWarning')) { try { $script:Config.ColorWarning = [string][System.ConsoleColor]$config['ColorWarning'] } catch {} }
+        if ($config.ContainsKey('ColorError')) { try { $script:Config.ColorError = [string][System.ConsoleColor]$config['ColorError'] } catch {} }
+        
+        if ($config.ContainsKey('VerboseMode') -and [bool]::TryParse($config['VerboseMode'], [ref]$boolValue)) { $script:Config.VerboseMode = $boolValue }
+        if ($config.ContainsKey('ReloadCacheOnStartup') -and [bool]::TryParse($config['ReloadCacheOnStartup'], [ref]$boolValue)) { $script:Config.ReloadCacheOnStartup = $boolValue }
+        if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
+
+        if ($config.ContainsKey('CheckForPowerShell7') -and [bool]::TryParse($config['CheckForPowerShell7'], [ref]$boolValue)) { $script:Config.CheckForPowerShell7 = $boolValue }
+
+        # validate template folder
+        $templateFolder = $config[$keyName]
+        if (!(Test-Path -Path $templateFolder -PathType Container)) {
+            Write-Host "Template folder not found: $templateFolder" -ForegroundColor $script:Config.ColorError
+            Write-Host "Update '$($script:Config.ConfigFilename)' or delete it to reconfigure." -ForegroundColor $script:Config.ColorError
+            Write-Host ""
+            Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorError
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            exit
+        }
+
+        $script:Config.TemplateFolder = $templateFolder
+        $script:Config.TemplateCacheFile = Join-Path $scriptDir $script:Config.TemplateCacheFilename
+
+        # set verbose mode if enabled in config
+        $global:VerbosePreference = if ($script:Config.VerboseMode) { 'Continue' } else { 'SilentlyContinue' }
+
+        $Host.UI.RawUI.ForegroundColor = $script:Config.ColorText
+        $Host.UI.RawUI.BackgroundColor = $script:Config.ColorBackground
     }
 }
 
@@ -138,58 +286,93 @@ function Search-Template {
         [Parameter(Mandatory = $true)]
         [string] $Query
     )
-    begin {
-        # search algorithm configuration
-        $factor_title = 10
-        $factor_relativePath = 10
-        $factor_keywords = 5
-        $factor_content = 2
-    }
     process {
-        # preprocess search query
-        $splitQueries = $Query.Split(" ").Trim()
+        # preprocess query: lowercase, normalize, split, unique
+        $queryFragments = ConvertTo-SearchWords -Text $Query
 
-        # iterate among templates and calculate query match score
-        ForEach ($template in $templates) {
+        # score each template against each query fragment
+        $results = foreach ($template in $templates) {
 
-            $template.score = 0
-            ForEach ($splitQuery in $splitQueries) {
-                $score = 0
+            $score = 0
+            $dimScores = @{ T = 0; K = 0; P = 0; C = 0 }
+            foreach ($fragment in $queryFragments) {
 
-                # title
-                if ($template.Title -like "*$splitQuery*") {
-                    $score += $factor_title
-                }
-
-                # relative path
-                if ($template.RelativePath -like "*$splitQuery*") {
-                    $score += $factor_relativePath
-                }
-
-                # keywords
-                ForEach ($keyword in $template.Keywords) {
-                    if ($keyword -like "*$splitQuery*") {
-                        $score += $factor_keywords
+                foreach ($dimension in @(
+                        @{ Name = "T"; Words = $template.Search.TitleWords; Weight = $script:Config.SearchDimensionWeightTitle },
+                        @{ Name = "K"; Words = $template.Search.KeywordWords; Weight = $script:Config.SearchDimensionWeightKeywords },
+                        @{ Name = "P"; Words = $template.Search.PathWords; Weight = $script:Config.SearchDimensionWeightPath },
+                        @{ Name = "C"; Words = $template.Search.ContentWords; Weight = $script:Config.SearchDimensionWeightContent }
+                    )) {
+                    $dimensionScore = 0
+                    foreach ($word in $dimension.Words) {
+                        if ($word -eq $fragment) {
+                            $dimensionScore += $script:Config.SearchMatchWeightExact
+                        }
+                        elseif ($word.StartsWith($fragment)) {
+                            $dimensionScore += $script:Config.SearchMatchWeightPrefix
+                        }
+                        elseif ($word.Contains($fragment)) {
+                            $dimensionScore += $script:Config.SearchMatchWeightSubstring
+                        }
                     }
+                    $dimTotal = $dimensionScore * $dimension.Weight
+                    $score += $dimTotal
+                    $dimScores[$dimension.Name] += $dimTotal
                 }
+            }
 
-                # content
-                ForEach ($content in $template.Content) {
-                    if ($content -like "*$splitQuery*") {
-                        $score += $factor_content
-                    }
+            if ($score -gt 0) {
+                [PSCustomObject]@{
+                    Template  = $template
+                    Score     = $score
+                    DimScores = $dimScores
                 }
-
-                $template.Score += $score
             }
         }
         
-        $results = $templates `
-        | Where-Object { $_.Score -gt 0 } `
+        $results = $results `
         | Sort-Object -Property Score -Descending `
-        | Select-Object -First $CONFIG_number_of_results
+        | Select-Object -First $script:Config.NumberOfResults
 
         return $results
+    }
+}
+
+function Write-ContentWithHighlights {
+    param(
+        [string]$Content,
+        [string]$Query
+    )
+    process {
+        if ([string]::IsNullOrWhiteSpace($Query)) {
+            Write-Host $Content
+            return
+        }
+
+        # union of raw terms (preserves diacritics/casing) and preprocessed fragments (diacritics stripped)
+        $rawTerms = @($Query -split '\s+' | Where-Object { $_ -ne '' })
+        $preprocessedTerms = @(ConvertTo-SearchWords -Text $Query)
+        $terms = @($rawTerms + $preprocessedTerms | Select-Object -Unique)
+        $pattern = ($terms | ForEach-Object { [regex]::Escape($_) }) -join '|'
+        $matchList = [regex]::Matches($Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+        if ($matchList.Count -eq 0) {
+            Write-Host $Content
+            return
+        }
+
+        $pos = 0
+        foreach ($m in $matchList | Sort-Object Index) {
+            if ($m.Index -gt $pos) {
+                Write-Host $Content.Substring($pos, $m.Index - $pos) -NoNewline
+            }
+            Write-Host $Content.Substring($m.Index, $m.Length) -NoNewline -ForegroundColor $script:Config.ColorHighlight
+            $pos = $m.Index + $m.Length
+        }
+        if ($pos -lt $Content.Length) {
+            Write-Host $Content.Substring($pos) -NoNewline
+        }
+        Write-Host ""
     }
 }
 
@@ -197,7 +380,7 @@ function Write-Results {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        $Templates,
+        $Results,
         [Parameter(Mandatory = $false)]
         $Selection = 1,
         [Parameter(Mandatory = $false)]
@@ -206,7 +389,9 @@ function Write-Results {
     process {
 
         $cnt = 0
-        ForEach ($template in $templates) {
+        ForEach ($result in $Results) {
+
+            $template = $result.Template
 
             # header
             if ($cnt -eq 0) {
@@ -219,22 +404,46 @@ function Write-Results {
             # enumeration
             $cnt += 1
             $cntStr = $cnt.ToString().PadLeft(3, ' ')
-            
-            # string
+            $width = Get-UIWidth
+            $prefix = " $cntStr | "
+
+            # string + truncation
             if ($Style -eq "modified") {
-                $printStr = " $cntStr | $($template.LastWriteTime) $($template.Title)"
+                $fixed = $template.LastWriteTime + " "
+                $maxTitle = $width - $prefix.Length - $fixed.Length
+                $title = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                $printStr = $prefix + $fixed + $title
+                $verboseSuffix = ""
             }
             else {
-                # "search"
-                $printStr = " $cntStr | $($template.Title) [$($template.Score)]"
+                if ($script:Config.VerboseMode) {
+                    $verboseSuffix = "  [$($result.Score)]  T:$($result.DimScores.T) K:$($result.DimScores.K) P:$($result.DimScores.P) C:$($result.DimScores.C)"
+                    $maxTitle = $width - $prefix.Length - $verboseSuffix.Length
+                    $title = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                    $pad = [Math]::Max(0, $width - $prefix.Length - $title.Length - $verboseSuffix.Length)
+                    $printStr = $prefix + $title + (" " * $pad)
+                }
+                else {
+                    $verboseSuffix = ""
+                    $maxTitle = $width - $prefix.Length
+                    $title = if ($template.Title.Length -gt $maxTitle -and $maxTitle -gt 3) { $template.Title.Substring(0, $maxTitle - 3) + "..." } else { $template.Title }
+                    $printStr = $prefix + $title
+                }
             }
 
             # write + color
             if ($cnt -eq $Selection) {
-                Write-Host $printStr -ForegroundColor Yellow
+                Write-Host $printStr -NoNewline -ForegroundColor $script:Config.ColorHighlight
             }
             else {
-                Write-Host $printStr
+                Write-Host $printStr -NoNewline
+            }
+
+            if ($verboseSuffix) {
+                Write-Host $verboseSuffix -ForegroundColor $script:Config.ColorWarning
+            }
+            else {
+                Write-Host ""
             }
         }
     }
@@ -250,25 +459,51 @@ function Get-TemplatesFromFolder {
     process {
 
         $folder = Resolve-Path -Path $TemplateFolder
-        $templates = @()
 
         # get files
-        $files = Get-ChildItem -Path $folder -Recurse -File -Include "*.txt"
+        $files = @(Get-ChildItem -Path $folder -Recurse -File -Include "*.txt")
 
         # process files
         $cnt = 0
-        ForEach ($file in $files) {
+        $lastReportedPct = -1
+        $templates = ForEach ($file in $files) {
             $cnt += 1
-            $percentComplete = [math]::Round(($cnt / $files.Count) * 100, 2)
-            Write-Progress  -Activity "Processing templates" `
-                -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
-                -PercentComplete $percentComplete
+            $percentComplete = [math]::Floor(($cnt / $files.Count) * 100)
+            if ($percentComplete -ge $lastReportedPct + 5 -or $cnt -eq $files.Count) {
+                $lastReportedPct = $percentComplete
+                Write-Progress -Activity "Processing templates" `
+                    -Status "Template $($cnt) of $($files.Count): $($file.Name)" `
+                    -PercentComplete $percentComplete
+            }
 
-            $templates += Get-TemplateFromFile -FilePath $file -BaseFolder $TemplateFolder
+            Get-TemplateFromFile -FilePath $file -BaseFolder $folder
         }
-        Write-Progress -Activity "Processing Text Files" -Completed
+        Write-Progress -Activity "Processing templates" -Completed
 
         return $templates
+    }
+}
+
+function ConvertTo-SearchWords {
+    param(
+        [string]$Text
+    )
+    process {
+        if ([string]::IsNullOrWhiteSpace($Text)) { return @() }
+
+        $s = $Text.ToLowerInvariant()
+
+        # strip diacritics: decompose to NFD, remove combining marks, recompose
+        $s = $s.Normalize([System.Text.NormalizationForm]::FormD)
+        $s = [System.Text.RegularExpressions.Regex]::Replace($s, '\p{Mn}', '')
+        $s = $s.Normalize([System.Text.NormalizationForm]::FormC)
+
+        # split on any non-alphanumeric run (spaces, _, -, \, /, . etc.)
+        $words = [System.Text.RegularExpressions.Regex]::Split($s, '[^a-z0-9]+') |
+        Where-Object { $_ -ne '' } |
+        Select-Object -Unique
+
+        return @($words)
     }
 }
 
@@ -280,9 +515,7 @@ function Get-TemplateFromFile {
         [string] $FilePath,
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Container })]
-        [string] $BaseFolder,
-        [Parameter(Mandatory = $false)]
-        [bool] $Personal = $true
+        [string] $BaseFolder
     )
     process {
 
@@ -290,26 +523,26 @@ function Get-TemplateFromFile {
         $title = [System.IO.Path]::GetFileNameWithoutExtension($FilePath)
 
         # get path
-        $relativePath = $FilePath | Split-Path -Parent | ForEach-Object { $_ -replace [regex]::Escape($BaseFolder), "" } | ForEach-Object { $_ -replace "^\\", "" }
+        $relativePath = $FilePath | Split-Path -Parent | ForEach-Object { $_ -replace [regex]::Escape($BaseFolder), "" } | ForEach-Object { $_ -replace "^[/\\]", "" }
 
         # get lastWriteTime
-        $lastWriteTime = (Get-ChildItem -Path $FilePath).LastWriteTime
+        $lastWriteTime = (Get-ChildItem -Path $FilePath).LastWriteTime.ToString("yyyy-MM-dd HH:mm")
 
         # get content
-        $rawContent = Get-Content -Path $FilePath -Raw -Encoding UTF8
-        $lines = $rawContent -split '\r?\n'
-        $numberOfLines = $lines.Count
+        $rawContent = [System.IO.File]::ReadAllText($FilePath, [System.Text.Encoding]::UTF8)
         
-        # extract keywords
-        $firstLine = $lines[0]
-        $isKeywords = $firstLine.StartsWith("KEYWORDS:")
         $keywords = @()
-        if ($isKeywords) {
-            $keywords = $firstLine.Replace("KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim() }
-            $content = $lines[1..($numberOfLines - 1)]
-        }
-        else {
-            $content = $lines
+        $content = $rawContent
+        
+        # extract keywords from first line if present
+        if ($rawContent) {
+            $lines = $rawContent -split '\r?\n', 2  # Split only on first newline
+            $firstLine = $lines[0]
+            
+            if ($firstLine.StartsWith("KEYWORDS:", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $keywords = ($firstLine -replace "(?i)^KEYWORDS:", "").Split(",") | ForEach-Object { $_.Trim() }
+                $content = if ($lines.Count -gt 1) { $lines[1] } else { "" }
+            }
         }
 
         $template = [PSCustomObject]@{
@@ -317,10 +550,8 @@ function Get-TemplateFromFile {
             RelativePath  = $relativePath
             Keywords      = $keywords
             Content       = $content
-            Score         = 0
             File          = $FilePath
             LastWriteTime = $lastWriteTime
-            Personal      = $Personal
         }
 
         return $template
@@ -330,7 +561,7 @@ function Get-TemplateFromFile {
 function Convert-TemplatesToJSON {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Container })]
         $Folder,
 
@@ -339,7 +570,21 @@ function Convert-TemplatesToJSON {
     )
     process {
         $templates = Get-TemplatesFromFolder -TemplateFolder $Folder
-        $templates | ConvertTo-Json | Out-File -FilePath $JSONFile -Encoding UTF8
+
+        if (@($templates).Count -eq 0) {
+            Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
+            Write-Host ""
+            Write-Host "Your template folder doesn't contain any template text files (*.txt)." -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Add your first template to the following folder and restart." -ForegroundColor $script:Config.ColorWarning
+            Write-Host ""
+            Write-Host "$($Folder)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host ""
+            Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorWarning
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            exit
+        }
+
+        $templates | ConvertTo-Json -Depth 3 | Out-File -FilePath $JSONFile -Encoding UTF8
     }
 }
 
@@ -348,41 +593,87 @@ function Import-TemplatesFromJSON {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
-        $JSON
+        $JSONFile
     )
     process {
-        return Get-Content -Path $JSON -Encoding UTF8 | ConvertFrom-Json
+        $content = Get-Content -Path $JSONFile -Raw -Encoding UTF8
+        try {
+            $templates = $content | ConvertFrom-Json
+        }
+        catch {
+            Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
+            Write-Host "Template cache is corrupt and has been removed." -ForegroundColor $script:Config.ColorWarning
+            return $null
+        }
+        return $templates
+    }
+}
+
+function Add-SearchWords {
+    param($Templates)
+    process {
+        foreach ($template in $Templates) {
+            $template | Add-Member -NotePropertyName Search -NotePropertyValue (
+                [PSCustomObject]@{
+                    TitleWords   = @(ConvertTo-SearchWords -Text $template.Title)
+                    KeywordWords = @(@($template.Keywords) | ForEach-Object { ConvertTo-SearchWords -Text $_ } | Select-Object -Unique)
+                    ContentWords = @(ConvertTo-SearchWords -Text $template.Content)
+                    PathWords    = @(ConvertTo-SearchWords -Text $template.RelativePath)
+                }
+            )
+        }
+        return $Templates
     }
 }
 
 function Import-Templates {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Container })]
-        $TemplateFolder,
-
-        [Parameter(Mandatory = $true)]
-        $TemplateFile,
-
         [Parameter(Mandatory = $false)]
         [switch]$ForceReload
     )
     process {
 
-        # checking situation
-        Write-Host "- Checking templates..."
-        $isJSON = Test-Path -Path $TemplateFile
+        $script:Stats.RebuildCacheMs = 0
+        $script:Stats.PreprocessMs = 0
+        $script:Stats.LastSearchMs = 0
+        $script:Stats.AvgSearchMs = 0
+        $script:Stats.SearchCount = 0
 
-        # reload if needed
+        # check template cache
+        Write-Host "- Checking templates..."
+        $isJSON = Test-Path -Path $script:Config.TemplateCacheFile -Type Leaf
+
+        # rebuild cache from .txt files if missing or forced
         if ($ForceReload -or !$isJSON) {
             Write-Host "- Reloading templates from folder..."
-            Convert-TemplatesToJSON -Folder $TemplateFolder -JSONFile $TemplateFile
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            Convert-TemplatesToJSON -Folder $script:Config.TemplateFolder -JSONFile $script:Config.TemplateCacheFile
+            $sw.Stop()
+            $script:Stats.RebuildCacheMs = $sw.ElapsedMilliseconds
         }
 
-        # import templates from json
+        # load templates from cache
         Write-Host "- Importing templates..."
-        $templates = Import-TemplatesFromJSON -JSON $TemplateFile
+        $templates = Import-TemplatesFromJSON -JSONFile $script:Config.TemplateCacheFile
+
+        # if cache was corrupt, rebuild and reimport
+        if ($null -eq $templates) {
+            Write-Host "- Reloading templates from folder..."
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            Convert-TemplatesToJSON -Folder $script:Config.TemplateFolder -JSONFile $script:Config.TemplateCacheFile
+            $sw.Stop()
+            $script:Stats.RebuildCacheMs = $sw.ElapsedMilliseconds
+            Write-Host "- Importing templates..."
+            $templates = Import-TemplatesFromJSON -JSONFile $script:Config.TemplateCacheFile
+        }
+
+        # preprocess search words in memory
+        Write-Host "- Preprocessing search index..."
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $templates = Add-SearchWords -Templates $templates
+        $sw.Stop()
+        $script:Stats.PreprocessMs = $sw.ElapsedMilliseconds
 
         return $templates
     }
@@ -392,94 +683,108 @@ function Write-Info {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Container })]
-        $TemplateFolder,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -Type Leaf })]
-        $TemplateFile,
-
-        [Parameter(Mandatory = $true)]
         $Templates
     )
     process {
+        Write-Host "Template count:             $(@($Templates).Count)"
+        
+        $lastWriteTimeCache = (Get-ChildItem -Path $script:Config.TemplateCacheFile).LastWriteTime
+        $lastWriteTimeCache_str = $lastWriteTimeCache.ToString("dd-MM-yyyy HH:mm")
+        Write-Host "Last reload of templates:   " -NoNewline
+        if ($lastWriteTimeCache -lt (Get-Date).AddMonths(-1)) {
+            Write-Host "$($lastWriteTimeCache_str) Cache outdated. Run 'r' to reload." -ForegroundColor $script:Config.ColorError
+        }
+        else {
+            Write-Host $lastWriteTimeCache_str
+        }
 
-        Write-Host "Personal template folder:           $($TemplateFolder)"
-        Write-Host "Personal template count:            $(@($Templates).Count)"
+        Write-Host "Template folder:            $($script:Config.TemplateFolder)"
+        Write-Host "TTT and config location:    $(Split-Path -Parent $PSCommandPath)"
 
-        $lastWriteTime_json_str = (Get-ChildItem -Path $TemplateFile).LastWriteTime.ToString("dd-MM-yyyy HH:mm")
-        Write-Host "Last reload of templates:           $($lastWriteTime_json_str)"
-        Write-Host "PowerShell version:                 $($PSVersionTable.PSVersion.ToString())"
+        if ($script:Config.VerboseMode) {
+            Write-Host ""
+            Write-Host "PowerShell version:         $($PSVersionTable.PSVersion.ToString())"  -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Script file:                $($PSCommandPath)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Config file:                $(Join-Path (Split-Path -Parent $PSCommandPath) $script:Config.ConfigFilename)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Cache file:                 $($script:Config.TemplateCacheFile)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Reload cache on startup:    $($script:Config.ReloadCacheOnStartup)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Check for PowerShell 7:     $($script:Config.CheckForPowerShell7)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Startup message:            $($script:Config.StartupMessage)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Number of results:          $($script:Config.NumberOfResults)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Search dimension weights:   title=$($script:Config.SearchDimensionWeightTitle)  path=$($script:Config.SearchDimensionWeightPath)  keywords=$($script:Config.SearchDimensionWeightKeywords)  content=$($script:Config.SearchDimensionWeightContent)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Search match weights:       exact=$($script:Config.SearchMatchWeightExact)  prefix=$($script:Config.SearchMatchWeightPrefix)  substring=$($script:Config.SearchMatchWeightSubstring)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Colors:                     selection=$($script:Config.ColorHighlight)  warning=$($script:Config.ColorWarning)  error=$($script:Config.ColorError)  text=$($script:Config.ColorText)  background=$($script:Config.ColorBackground)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host ""
+            Write-Host "Rebuild cache (ms):         $($script:Stats.RebuildCacheMs)" -ForegroundColor $script:Config.ColorWarning
+            Write-Host "Preprocess templates (ms):  $($script:Stats.PreprocessMs)" -ForegroundColor $script:Config.ColorWarning
+        }
     }
 }
 
 
 ### < MAIN FUNCTION >
 function Start-TextTemplateTool {
+    [CmdletBinding()]
+    param()
     process {
-
+        
         # startup procedure
         Write-Header
 
         # add desktop shortcut
-        Write-Host "- Checking for desktop shortcut..."
-        Add-DesktopShortcut
-
         Write-Host "- Loading configuration..."
-        $personal_config_file = Resolve-Path -Path $PSCommandPath | Split-Path -Parent | Join-Path -ChildPath $CONFIG_personal_config_filename
+        Read-Config
 
-        if (!(Test-Path -Path $personal_config_file)) {
-            Set-Config -FilePath $personal_config_file
+        $IsWin = ($null -ne $env:OS -and $env:OS -eq "Windows_NT")
+        if ($IsWin) {
+            Write-Host "- Checking for desktop shortcut..."
+            Add-DesktopShortcut
         }
 
-        $config = Read-Config -FilePath $personal_config_file
+        # load templates
+        $templates = Import-Templates -ForceReload:$script:Config.ReloadCacheOnStartup
 
-        # derive files and folders from config
-        $personal_template_folder = Resolve-Path -Path $config['personal-template-folder']
-        $personal_template_file = Resolve-Path -Path $PSCommandPath | Split-Path -Parent | Join-Path -ChildPath $CONFIG_personal_template_filename
-
-        # import templates
-        $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file
-
-        # write startup screen
-        Write-Header
+        # show startup screen
+        Write-Header -ShowStartupMessage
         Write-StartupScreen
 
-        if (!$templates) {
-            Write-Host ""
-            Write-Host "Your personal template folder doesn't contain any template text files (*.txt)." -ForegroundColor Yellow
-            Write-Host "Add your first template to $($personal_template_folder) and restart $($app_name)." -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "Press any key to exit." -ForegroundColor Yellow
-            Read-Host
-            exit
-        }
-
         # infinite main loop
+        $topResults = $null
         $selection = 1
         $style = "search"
-        $isSelection = $false
+        $currentQuery = ""
         do {
+            $justSearched = $false
             Write-Host ""
-            Write-Host "--------------------------------------------------------------------------------"
-            $query = Read-Host "> Search / Select / Command"
+            Write-Host ("-" * (Get-UIWidth))
+            $prompt = if ($topResults) { "> Search / Select / Command" } else { "> Search / Command" }
+            $query = Read-Host $prompt
             Write-Header
 
             # empty input -> cycle
             if ($query -eq "") {
+
+                # reset TUI state
+                $topResults = $null
                 $selection = 1
                 $style = "search"
+                $currentQuery = ""
+
                 Write-StartupScreen
                 continue
             }
 
             # check for commands
             elseif ($query -eq "h") {
-                Write-Host "Available commands:"
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+                $currentQuery = ""
+
+                Write-Host "   Author:         Christian Kuhn - KUHN Engineering | www.kuhn-engineering.ch"
+                Write-Host "   GitHub:         https://github.com/KUHN-Engineering/text-template-tool"
                 Write-Host ""
-                Write-Host "   h    help       Lists all available commands."
-                Write-Host ""
-                Write-Host "   i    info       Displays template count and folder info."
+                Write-Host "# Commands"
                 Write-Host ""
                 Write-Host "   o    open       Opens the selected template in a text editor."
                 Write-Host ""
@@ -491,9 +796,12 @@ function Start-TextTemplateTool {
                 Write-Host ""
                 Write-Host "   m    modified   Lists the most recently modified templates."
                 Write-Host ""
+                Write-Host "   i    info       Displays template count and folder info."
+                Write-Host ""
+                Write-Host "   h    help       Shows this help."
+                Write-Host ""
                 Write-Host "   q    quit       Exits Text Template Tool."
-                
-                $selection = 0
+
                 continue
             }
             elseif ($query -eq "q") {
@@ -501,96 +809,124 @@ function Start-TextTemplateTool {
                 exit
             }
             elseif ($query -eq "o") {
-                if ($isSelection) {
-                    Start-Process $topResults[$Selection - 1].File
+                if ($topResults) {
+                    Start-Process $topResults[$selection - 1].Template.File
                 }
                 else {
-                    Write-Host "Search and select a template before opening with command 'o'."
+                    Write-Host "No template selected. Search first, then open with 'o'." -ForegroundColor $script:Config.ColorWarning
                     continue
                 }
             }
             elseif ($query -eq "p") {
-                if ($isSelection) {
-                    $parentFolder = Split-Path -Path $topResults[$Selection - 1].File -Parent
+                if ($topResults) {
+                    $parentFolder = Split-Path -Path $topResults[$selection - 1].Template.File -Parent
                     Start-Process $parentFolder
                 }
                 else {
-                    Write-Host "Search and select a template before opening parent folder with command 'p'."
+                    Write-Host "No template selected. Search first, then open the parent folder with 'p'." -ForegroundColor $script:Config.ColorWarning
                     continue
                 }
             }
             elseif ($query -eq "r") {
-                Write-Header
-                $templates = Import-Templates -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -ForceReload
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+                $currentQuery = ""
 
                 Write-Header
-                Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
+                $templates = Import-Templates -ForceReload
 
-                $isSelection = $false
+                Write-Header
+                Write-Info -Templates $templates
+
                 continue
             }
             elseif ($query -eq "f") {
-                Start-Process $personal_template_folder
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+                $currentQuery = ""
+
+                Start-Process $script:Config.TemplateFolder
+
+                Write-StartupScreen
                 continue
             }
             elseif ($query -eq "m") {
 
+                $currentQuery = ""
+                $topResults = ForEach ($template in $templates) {
+                    [PSCustomObject]@{
+                        Template      = $template
+                        LastWriteTime = $template.LastWriteTime
+                    }
+                }
+                
+                $topResults = $topResults | Sort-Object LastWriteTime -Descending | Select-Object -First $script:Config.NumberOfResults
+                
                 $selection = 1
                 $style = "modified"
-                $topResults = $templates | Sort-Object LastWriteTime -Descending | Select-Object -First $CONFIG_number_of_results
 
                 # no template found
-                if (!$topResults) {
+                if (@($topResults).Count -eq 0) {
                     Write-Host "No matching template found."
-                    $isSelection = $false
                     continue
-                }
-                else {
-                    $isSelection = $true
                 }
             }
             elseif ($query -eq "i") {
-                Write-Info -TemplateFolder $personal_template_folder -TemplateFile $personal_template_file -Templates $templates
-                $isSelection = $false
+                # reset TUI state
+                $topResults = $null
+                $selection = 1
+                $currentQuery = ""
+
+                Write-Info -Templates $templates
                 continue
             }
 
             # check for selection inputs
-            elseif ( $isSelection -and ($query -match '^(?:[1-9]|[1-9][0-9]|[1-9][0-9]{2})$') ) {
-                if ([int]$query -gt $topResults.Count) {
-                    $selection = 1
-                }
-                else {
-                    $selection = [int]$query
-                }
+            elseif ( $topResults -and ($query -match '^[1-9]\d*$') -and ([int]$query -le @($topResults).Count) ) {
+                $selection = [int]$query
             }
 
             # search query
             else {
+                $currentQuery = $query
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                $topResults = Search-Template -Templates $templates -Query $query
+                $sw.Stop()
+                $script:Stats.LastSearchMs = $sw.ElapsedMilliseconds
+                $script:Stats.SearchCount++
+                $script:Stats.AvgSearchMs = [math]::Round(
+                    $script:Stats.AvgSearchMs + ($script:Stats.LastSearchMs - $script:Stats.AvgSearchMs) / $script:Stats.SearchCount, 1)
+                $justSearched = $true
                 $selection = 1
                 $style = "search"
-                $topResults = Search-Template -Templates $templates -Query $query
 
                 # no template found
-                if (!$topResults) {
+                if (@($topResults).Count -eq 0) {
                     Write-Host "No matching template found."
-                    $isSelection = $false
                     continue
-                }
-                else {
-                    $isSelection = $true
                 }
             }
 
-            if ($isSelection) {
-                $template = $topResults[$Selection - 1]
-                $template.Content | Set-Clipboard
-                $template.Content | Write-Host
+            if ($topResults) {
+                $template = $topResults[$selection - 1].Template
+                
+                if (-not [string]::IsNullOrWhiteSpace($template.Content)) {
+                    Set-Clipboard -Value $template.Content
+                    Write-ContentWithHighlights -Content $template.Content -Query $currentQuery
+                }
+                else {
+                    Write-Host "Empty template file." -ForegroundColor $script:Config.ColorWarning
+                }
 
                 Write-Host ""
-                Write-Host "--------------------------------------------------------------------------------"
+                if ($justSearched -and $script:Config.VerboseMode) {
+                    Write-Host "Search (ms): last=$($script:Stats.LastSearchMs)  avg=$($script:Stats.AvgSearchMs)  n=$($script:Stats.SearchCount)" -ForegroundColor $script:Config.ColorWarning
+                }
+                Write-Host ("-" * (Get-UIWidth))
                 Write-Host ""
-                Write-Results -Templates $topResults -Selection $selection -Style $style
+                Write-Results -Results $topResults -Selection $selection -Style $style
             }
 
         } while ( $true )

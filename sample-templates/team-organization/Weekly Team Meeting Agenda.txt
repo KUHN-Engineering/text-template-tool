@@ -1,0 +1,24 @@
+KEYWORDS: meeting, agenda, weekly, team, standup, sync, status, planning
+Weekly Team Meeting – Agenda
+
+Date: [DATE]
+Time: [TIME]
+Location / Link: [LOCATION]
+
+1. Check-in (5 min)
+   - How is everyone doing?
+
+2. Status updates (15 min)
+   - Each team member: What did I complete? What is in progress? Any blockers?
+
+3. Key topics (20 min)
+   - [TOPIC 1]
+   - [TOPIC 2]
+   - [TOPIC 3]
+
+4. Decisions & action items (10 min)
+   - Owner | Action | Due date
+
+5. Any other business (5 min)
+
+Next meeting: [DATE]
