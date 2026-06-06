@@ -603,7 +603,8 @@ function Convert-TemplatesToJSON {
             Write-Host ""
             Write-Host "Your template folder doesn't contain any template text files (*.txt)." -ForegroundColor $script:Config.ColorWarning
             Write-Host "Add your first template to the following folder and restart." -ForegroundColor $script:Config.ColorWarning
-            Write-Host "$($Folder)" -ForegroundColor $script:Config.ColorHighlight
+            Write-Host ""
+            Write-Host "$($Folder)" -ForegroundColor $script:Config.ColorWarning
             Write-Host ""
             Write-Host "Press any key to exit." -ForegroundColor $script:Config.ColorWarning
             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
