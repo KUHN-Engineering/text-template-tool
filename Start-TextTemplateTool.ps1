@@ -56,6 +56,9 @@ $script:Config = @{
     # will be set during runtime in Read-Config
     TemplateFolder                = ""
     TemplateCacheFile             = ""
+
+    # clipboard method: 1 = Set-Clipboard, 2 = clip.exe, 3 = STA runspace (Windows.Forms)
+    TempClipboardMethod           = 3
 }
 
 $script:Stats = @{
@@ -67,6 +70,76 @@ $script:Stats = @{
 }
 
 ### < SUB FUNCTIONS >
+function Set-ClipboardSafe {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text,
+
+        [int]$TimeoutMs = 2000,
+        [int]$MaxRetries = 2
+    )
+
+    switch ($script:Config.TempClipboardMethod) {
+
+        1 {
+            # Set-Clipboard cmdlet
+            Set-Clipboard -Value $Text
+        }
+
+        2 {
+            # clip.exe via stdin
+            $Text | clip
+        }
+
+        default {
+            # STA runspace with Windows.Forms
+            $attempt = 0
+            while ($attempt -le $MaxRetries) {
+                $runspace = $null
+                $powershell = $null
+
+                try {
+                    $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+                    $runspace.ApartmentState = [System.Threading.ApartmentState]::STA
+                    $runspace.Open()
+
+                    $powershell = [PowerShell]::Create()
+                    $powershell.Runspace = $runspace
+
+                    $null = $powershell.AddScript({
+                            param($text)
+                            Add-Type -AssemblyName System.Windows.Forms
+                            [System.Windows.Forms.Clipboard]::SetText($text)
+                        }).AddArgument($Text)
+
+                    $async = $powershell.BeginInvoke()
+
+                    if ($async.AsyncWaitHandle.WaitOne($TimeoutMs)) {
+                        $null = $powershell.EndInvoke($async)
+                        return
+                    }
+                    else {
+                        $powershell.Stop()
+                        $attempt++
+                        if ($attempt -le $MaxRetries) { Start-Sleep -Milliseconds 300 }
+                    }
+                }
+                catch {
+                    Write-Warning "Clipboard operation failed (attempt $attempt): $($_.Exception.Message)"
+                    $attempt++
+                    if ($attempt -le $MaxRetries) { Start-Sleep -Milliseconds 300 }
+                }
+                finally {
+                    if ($powershell) { $powershell.Dispose() }
+                    if ($runspace) { $runspace.Close(); $runspace.Dispose() }
+                }
+            }
+
+            Write-Host "Warning: Could not copy to clipboard after $MaxRetries attempts." -ForegroundColor $script:Config.ColorWarning
+        }
+    }
+}
+
 function Get-UIWidth {
     [Math]::Max(80, $Host.UI.RawUI.WindowSize.Width)
 }
@@ -254,6 +327,7 @@ function Read-Config {
         if ($config.ContainsKey('StartupMessage') -and -not [string]::IsNullOrWhiteSpace($config['StartupMessage'])) { $script:Config.StartupMessage = $config['StartupMessage'] }
 
         if ($config.ContainsKey('CheckForPowerShell7') -and [bool]::TryParse($config['CheckForPowerShell7'], [ref]$boolValue)) { $script:Config.CheckForPowerShell7 = $boolValue }
+        if ($config.ContainsKey('TempClipboardMethod') -and [int]::TryParse($config['TempClipboardMethod'], [ref]$intValue) -and $intValue -ge 1 -and $intValue -le 3) { $script:Config.TempClipboardMethod = $intValue }
 
         # validate template folder
         $templateFolder = $config[$keyName]
@@ -913,7 +987,7 @@ function Start-TextTemplateTool {
                 $template = $topResults[$selection - 1].Template
                 
                 if (-not [string]::IsNullOrWhiteSpace($template.Content)) {
-                    Set-Clipboard -Value $template.Content
+                    Set-ClipboardSafe -Text $template.Content
                     Write-ContentWithHighlights -Content $template.Content -Query $currentQuery
                 }
                 else {
