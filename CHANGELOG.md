@@ -5,7 +5,7 @@
 - **Search algorithm:** completely new multi-dimensional scoring across title, path, keywords, and content; differentiates exact, prefix, and substring matches with configurable weights
 - **Configuration:** 17+ parameters configurable via `config.txt`; customisable colors, search weights, startup message, and more
 - **User interface:** adaptive terminal width; centred TTT logo; search term highlighting in displayed content
-- **Performance:** added template proprocessing for search, progress bar throttled to 5% update intervals
+- **Performance:** added template preprocessing for search, progress bar throttled to 5% update intervals
 - **Verbose mode:** enabled via config file (default: off); shows config values on the info page, shows search scores and performance metrics
 - **Robustness:** corrupt template cache is auto-detected and rebuilt; empty template folder handling; improved path validation
 - **Desktop shortcut:** skipped on non-Windows systems; optional PowerShell 7 detection (default: off)
