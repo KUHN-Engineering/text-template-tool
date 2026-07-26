@@ -672,7 +672,7 @@ function Import-TemplatesFromJSON {
     process {
         $content = Get-Content -Path $JSONFile -Raw -Encoding UTF8
         try {
-            $templates = $content | ConvertFrom-Json
+            $templates = @($content | ConvertFrom-Json)
         }
         catch {
             Remove-Item -Path $JSONFile -Force -ErrorAction SilentlyContinue
