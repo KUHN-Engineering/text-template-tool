@@ -237,9 +237,16 @@ function Read-Config {
                     $needsPrompt = $false
                 }
                 else {
-                    (Get-Content -Path $filePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $filePath -Encoding UTF8
+                    # TEMP (fmi): due to windows 10 to windowss 11 migration misallaignment (different network drive relative paths), script will not remove the invalid key-value pair automatically. User will have to fix it manually.
+                    # (Get-Content -Path $filePath -Encoding UTF8 | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($keyName))\s*:" }) | Out-File -FilePath $filePath -Encoding UTF8
                     Write-Host ""
-                    Write-Host "Key '$keyName' has an invalid value in '$($script:Config.ConfigFilename)'." -ForegroundColor $script:Config.ColorWarning
+                    Write-Host "Key '$keyName' has an invalid value in '$($script:Config.ConfigFilename)' or folder '$($existingValue)' is not available." -ForegroundColor $script:Config.ColorWarning
+                    
+                    # TEMP (fmi)
+                    Write-Host ""
+                    Write-Host "Stelle sicher, dass du TTT richtig installiert hast. Beachte, ob du Windows 10 oder Windows 11 verwendest. Siehe Anleitung im Netzlaufwerk." -ForegroundColor $script:Config.ColorWarning
+                    Read-Host
+                    exit
                 }
             }
             else {
