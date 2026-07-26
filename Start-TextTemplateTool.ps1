@@ -7,7 +7,7 @@
     Compact and efficient PowerShell utility that quickly searches through text templates and copies them directly to the clipboard for immediate use.
 
     .NOTES
-    Version:        0.5.0
+    Version:        0.5.x
     Author:         Christian Kuhn - KUHN Engineering | www.kuhn-engineering.ch
     Date:           2026
 
@@ -26,7 +26,7 @@
 Set-StrictMode -Version Latest
 
 $script:AppName = "TTT - Text Template Tool"
-$script:AppVersion = "0.5.0"
+$script:AppVersion = "0.5.x"
 
 ### < CONFIGURATION >
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
